@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Barbarenfarmer NEW (Toggleable)
+// @name         Eriks Baba Farmer v1
 // @namespace    http://tampermonkey.net/
 // @version      1.5
 // @description  Automates farming of nearby barbarian villages in Tribal Wars with toggle button
