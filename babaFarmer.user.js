@@ -7,6 +7,7 @@
 // @match        https://*.die-staemme.de/game.php*
 // @grant        GM.xmlHttpRequest
 // @connect      *.die-staemme.de
+// @icon         https://www.google.com/s2/favicons?sz=64&domain=die-staemme.de
 // @updateURL    https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/babaFarmer.user.js
 // @downloadURL  https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/babaFarmer.user.js
 // @require      https://gist.githubusercontent.com/BrockA/2625891/raw/waitForKeyElements.js
@@ -18,8 +19,7 @@
 
     let unitsToSend = JSON.parse(localStorage.getItem("unitsToSend")) || {
         spear: 0,
-        light: 0,
-        spy: 0
+        light: 0
     };
 
     const delayBetweenAttacks = 500;
