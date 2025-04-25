@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Eriks Baba Farmer v1
 // @namespace    http://tampermonkey.net/
-// @version      1.8
+// @version      1.9
 // @description  Automates farming of nearby barbarian villages in Tribal Wars with toggle button
 // @author       SpeckMich
 // @match        https://*.die-staemme.de/game.php*
@@ -19,8 +19,7 @@
 
     let unitsToSend = JSON.parse(localStorage.getItem("unitsToSend")) || {
         spear: 0,
-        light: 0,
-        knight: 0
+        light: 0
     };
 
     const delayBetweenAttacks = 500;
