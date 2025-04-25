@@ -7,6 +7,8 @@
 // @match        https://*.die-staemme.de/game.php*
 // @grant        GM.xmlHttpRequest
 // @connect      *.die-staemme.de
+// @updateURL    https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/babaFarmer.user.js
+// @downloadURL  https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/babaFarmer.user.js
 // @require      https://gist.githubusercontent.com/BrockA/2625891/raw/waitForKeyElements.js
 // @run-at       document-idle
 // ==/UserScript==
