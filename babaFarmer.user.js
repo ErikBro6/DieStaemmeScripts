@@ -24,7 +24,7 @@
 
     const delayBetweenAttacks = 500;
     let radius = parseInt(localStorage.getItem("farmingRadius")) || 5;
-    const farmingIntervalDelay = 5000;
+    const farmingIntervalDelay = 500;
 
     let farmingEnabled = JSON.parse(localStorage.getItem("farmingEnabled")) ?? true;
     let farmingInterval = null;
