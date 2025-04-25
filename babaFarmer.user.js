@@ -19,7 +19,8 @@
 
     let unitsToSend = JSON.parse(localStorage.getItem("unitsToSend")) || {
         spear: 0,
-        light: 0
+        light: 0,
+        knight: 0
     };
 
     const delayBetweenAttacks = 500;
