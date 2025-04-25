@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Eriks Baba Farmer v1
 // @namespace    http://tampermonkey.net/
-// @version      1.5
+// @version      1.6
 // @description  Automates farming of nearby barbarian villages in Tribal Wars with toggle button
 // @author       SpeckMich
 // @match        https://*.die-staemme.de/game.php*
