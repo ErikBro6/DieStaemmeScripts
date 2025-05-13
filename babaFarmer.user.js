@@ -275,5 +275,8 @@ function createUnitsInputPanel() {
     }
 
     // Start checking
-    clickConfirmButton();
+    if (farmingEnabled) {
+        clickConfirmButton();
+    }
+    
 })();
