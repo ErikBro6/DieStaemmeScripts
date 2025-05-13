@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name         Eriks Baba Farmer v1
 // @namespace    http://tampermonkey.net/
-// @version      1.9
+// @version      2.0
 // @description  Automates farming of nearby barbarian villages in Tribal Wars with toggle button
 // @author       SpeckMich
-// @match        https://*.die-staemme.de/game.php*
+// @match        https://*.die-staemme.de/game.php?village=*&screen=place*
+// @match        https://*.die-staemme.de/game.php?screen=place&village=*
 // @grant        GM.xmlHttpRequest
 // @connect      *.die-staemme.de
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=die-staemme.de
@@ -263,4 +264,16 @@ function createUnitsInputPanel() {
             startFarming();
         }
     });
+    function clickConfirmButton() {
+        const button = document.getElementById("troop_confirm_submit");
+        if (button) {
+            button.click();
+        } else {
+            // Try again in 100ms if button isn't there yet
+            setTimeout(clickConfirmButton, 100);
+        }
+    }
+
+    // Start checking
+    clickConfirmButton();
 })();
