@@ -4,7 +4,7 @@
 // @version      1.0
 // @description  Automatisiert Masseneinheitenrekrutierung mit UI-Kontrolle in Die Stämme (DE)
 // @author       SpeckMich
-// @match        https://*.die-staemme.de/game.php?village=*&screen=train*
+// @match        https://*.die-staemme.de/game.php?village=*&screen=train&mode=*
 // @grant        none
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=die-staemme.de
 // @updateURL    https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/massRecruiter.user.js
@@ -15,7 +15,7 @@
 (function () {
     'use strict';
 
-    let recruitingEnabled = JSON.parse(localStorage.getItem("recruitingEnabled")) ?? true;
+    let recruitingEnabled = JSON.parse(localStorage.getItem("recruitingEnabled")) ?? false;
     let recruitDelaySeconds = parseInt(localStorage.getItem("recruitDelaySeconds")) || 5;
     let recruitInterval = null;
 
@@ -76,6 +76,8 @@
         });
 
         container.appendChild(toggleButton);
+        const lineBreak = document.createElement('br');
+        container.appendChild(lineBreak);
         container.appendChild(delayLabel);
         container.appendChild(delayInput);
 
@@ -129,8 +131,8 @@
         }
     }
 
+    createControlPanel();
     window.addEventListener('load', () => {
-        createControlPanel();
         if (recruitingEnabled) {
             startRecruiting();
             tryReturn();
