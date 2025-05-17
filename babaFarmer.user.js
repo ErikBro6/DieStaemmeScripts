@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         SpeckMichs Baba Farmer v2
+// @name         SpeckMichs Baba Farmer
 // @namespace    http://tampermonkey.net/
-// @version      2.1
+// @version      2.2
 // @description  Automates farming of nearby barbarian villages in Tribal Wars with toggle button
 // @author       SpeckMich
 // @match        https://*.die-staemme.de/game.php?village=*&screen=place*

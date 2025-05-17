@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         SpeckMichs Auto Recruiter v1
+// @name         SpeckMichs Auto Recruiter
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      2.0
 // @description  Automatisiert Masseneinheitenrekrutierung mit UI-Kontrolle in Die Stämme (DE)
 // @author       SpeckMich
 // @match        https://*.die-staemme.de/game.php?village=*&screen=train&mode=*
@@ -50,11 +50,16 @@
             toggleButton.style.backgroundColor = recruitingEnabled ? '#4CAF50' : '#f44336';
 
             if (recruitingEnabled) {
-                startRecruiting();
+                if (mode === 'success') {
+                    tryReturn();
+                } else {
+                    startRecruiting();
+                }
             } else {
                 stopRecruiting();
             }
         });
+
 
         const delayLabel = document.createElement('label');
         delayLabel.textContent = 'Delay (s): ';
@@ -119,7 +124,7 @@
     }
 
     function tryReturn() {
-        const timeout = localStorage.getItem("recruitDelaySeconds")*1000;
+        const timeout = recruitDelaySeconds * 1000;
         const backLink = document.querySelector('a[href*="screen=train"][href*="mode=mass"][href*="page=0"]');
         if (backLink) {
            setTimeout(() => {
@@ -132,11 +137,17 @@
     }
 
     createControlPanel();
-    window.addEventListener('load', () => {
-        if (recruitingEnabled) {
-            startRecruiting();
-            tryReturn();
-        }
-    });
+    const urlParams = new URLSearchParams(window.location.search);
+    const mode = urlParams.get('mode');
+
+    if (recruitingEnabled && mode !== 'success') {
+        startRecruiting();
+    }
+
+    if (recruitingEnabled && mode === 'success') {
+        tryReturn();
+    }
+
+
 
 })();
