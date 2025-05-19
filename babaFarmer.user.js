@@ -23,9 +23,8 @@
         light: 0
     };
 
-    const delayBetweenAttacks = 500;
     let radius = parseInt(localStorage.getItem("farmingRadius")) || 5;
-    const farmingIntervalDelay = 500;
+    let farmingIntervalDelay = parseInt(localStorage.getItem("farmingDelay")) || 250;
 
     let farmingEnabled = JSON.parse(localStorage.getItem("farmingEnabled")) ?? true;
     let farmingInterval = null;
@@ -99,6 +98,24 @@ function createUnitsInputPanel() {
     });
 
     container.appendChild(radiusInput);
+    const delayTitle = document.createElement('div');
+    delayTitle.textContent = 'Delay';
+    delayTitle.style.marginTop = '10px';
+    delayTitle.style.fontWeight = 'bold';
+    container.appendChild(delayTitle);
+    const delayInput = document.createElement('input');
+    delayInput.type = 'number';
+    delayInput.value = farmingIntervalDelay;
+    delayInput.min = 1;
+    delayInput.style.width = '50px';
+    delayInput.style.marginTop = '5px';
+
+    delayInput.addEventListener('change', () => {
+        farmingIntervalDelay = parseInt(delayInput.value) || 250;
+        localStorage.setItem("farmingDelay", farmingIntervalDelay.toString());
+    });
+
+    container.appendChild(delayInput);
 
     document.body.appendChild(container);
 }
@@ -264,19 +281,25 @@ function createUnitsInputPanel() {
             startFarming();
         }
     });
-    function clickConfirmButton() {
+function observeConfirmButton() {
+    const observer = new MutationObserver((mutations, obs) => {
         const button = document.getElementById("troop_confirm_submit");
         if (button) {
             button.click();
-        } else {
-            // Try again in 100ms if button isn't there yet
-            setTimeout(clickConfirmButton, 100);
+            obs.disconnect();
         }
-    }
+    });
 
-    // Start checking
-    if (farmingEnabled) {
-        clickConfirmButton();
-    }
-    
+    observer.observe(document.body, {
+        childList: true,
+        subtree: true
+    });
+}
+
+
+if (farmingEnabled) {
+    observeConfirmButton();
+}
+
+
 })();

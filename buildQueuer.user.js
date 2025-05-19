@@ -4,7 +4,7 @@
 // @version      1.0
 // @description  Automatischer Gebäudeausbau mit GUI, Intervall, Auto-Reload und persistenter Steuerung
 // @author       SpeckMich
-// @match        https://des1.die-staemme.de/game.php?village=*&screen=overview_villages*
+// @match        https://*.die-staemme.de/game.php?village=*&screen=overview_villages*
 // @grant        none
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=die-staemme.de
 // @updateURL    https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/buildQueuer.user.js
