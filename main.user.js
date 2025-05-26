@@ -4,6 +4,7 @@
 // @version      1.0
 // @description  Erweitert die Die Stämme Erfahrung mit einigen Tools und Skripten
 // @author       SpeckMich
+// @connect      *.die-staemme.de
 // @match        https://*.die-staemme.de/game.php?*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=die-staemme.de
 // @updateURL    https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/main.user.js
