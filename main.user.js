@@ -18,7 +18,7 @@
 
     const page = new URL(location.href).searchParams.get("screen") || '';
 
-    const useLocal = true; // auf true stellen für lokale Entwicklung
+    const useLocal = false; // auf true stellen für lokale Entwicklung
     // Webserver starten mit:   python3 -m http.server 8123
 
     const modules = {
