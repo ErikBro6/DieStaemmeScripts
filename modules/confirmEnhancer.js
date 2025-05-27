@@ -78,7 +78,7 @@ function initCommandUI() {
     clearTabCountdown();
 
     // Neuer, präziser Countdown + Autoklick
-countdownInterval = setInterval(function() {
+    countdownInterval = setInterval(function() {
     let now = Math.ceil(Date.now() / 1000); // <- das ist der entscheidende Unterschied!
     let left = sendTime - now;
     document.title = "⏰ Abschick in " + formatCountdown(left >= 0 ? left : 0);
