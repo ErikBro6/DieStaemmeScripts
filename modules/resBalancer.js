@@ -2,7 +2,7 @@
 // discord: costache madalin#8472
 
 
-console.log("hello");
+console.log("Lokal Test");
 void(0)
 
 
@@ -56,11 +56,11 @@ if(typeof(TWMap) !="undefined" )
     
     async function main(){
         initializationTheme()
-        await $.getScript("https://dl.dropboxusercontent.com/s/i5c0so9hwsizogm/styleCSSGlobal.js?dl=0");
+        
 
         createMainInterface()
         changeTheme()
-        hitCountApi()
+    
     }
     main()
     
@@ -203,9 +203,16 @@ function createMainInterface(){
         </div>
     </div>`
     ////////////////////////////////////////add and remove window from page///////////////////////////////////////////
-    $("#div_container").remove()
-    $("#contentContainer").eq(0).prepend(html_info);
-    $("#mobileContent").eq(0).prepend(html_info);
+// Ersetze die Error-Box durch das Interface
+    var $errorBox = $(".error_box:has(.content:contains('Ungültiger Modus'))");
+    if($errorBox.length){
+        $errorBox.html(html_info);
+    } else {
+        // Fallback: falls nicht gefunden, Interface irgendwo sichtbar einfügen
+        $("#contentContainer").eq(0).prepend(html_info);
+    }
+
+
     
     if(game_data.device != "desktop"){
         $("#div_body").css("height","500px")
@@ -1245,31 +1252,6 @@ function calculateLaunches(
 }
 
 
-function hitCountApi(){
-    $.getJSON(`https://api.counterapi.dev/v1/${countNameSpace}/${countApiKey}/up`, response=>{
-        console.log(`This script has been run: ${response.count} times`);
-    });
-    if(game_data.device !="desktop"){
-        $.getJSON(`https://api.counterapi.dev/v1/${countNameSpace}/${countApiKey}_phone/up`, response=>{
-            console.log(`This script has been run on mobile: ${response.count} times`);
-        });
-    }
- 
-    $.getJSON(`https://api.counterapi.dev/v1/${countNameSpace}/${countApiKey}_id2${game_data.player.id}/up`, response=>{
-        if(response.count == 1){
-            $.getJSON(`https://api.counterapi.dev/v1/${countNameSpace}/${countApiKey}_scriptUsers/up`, response=>{});
-        }
-
-    });
-
-    try {
-        $.getJSON(`https://api.counterapi.dev/v1/${countNameSpace}/${countApiKey}_scriptUsers`, response=>{
-            console.log(`Total number of users: ${response.count}`);
-        }); 
-      
-    } catch (error) {}
-
-}
 
 
 
