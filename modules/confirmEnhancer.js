@@ -1,7 +1,8 @@
 console.log("aha");
 
 let sendTimeInit = false;      // Flag zur Initialisierung
-let countdownInterval = null;  // Für den Tab-Countdown
+let autoSendEnabled = false;   // Default aus
+let autoSendObserver = null;   // Für DOM-Observer
 
 function formatTimes(e) {
     function t(e) {
@@ -13,16 +14,17 @@ function formatTimes(e) {
 }
 
 function formatCountdown(sec) {
-    if (sec < 0) return '0:00';
-    let m = Math.floor(sec / 60);
+    if (sec < 0) return '0:00:00';
+    let h = Math.floor(sec / 3600);
+    let m = Math.floor((sec % 3600) / 60);
     let s = sec % 60;
-    return m + ":" + (s < 10 ? "0" : "") + s;
+    return h + ":" + (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
 }
 
 function clearTabCountdown() {
-    if (countdownInterval) {
-        clearInterval(countdownInterval);
-        countdownInterval = null;
+    if (autoSendObserver) {
+        autoSendObserver.disconnect();
+        autoSendObserver = null;
     }
     document.title = "Stämme"; // Oder Wunschtitel
 }
@@ -42,9 +44,29 @@ function initCommandUI() {
                     ? '100%'
                     : ($('#content_value').width() - $('form[action*="action=command"]').find('table').first().width() - 10) + 'px';
 
+                // Abschick Counter einfügen
                 $('form[action*="action=command"]').find('table').first()
                     .css('float', 'left')
-                    .find('tr').last().after('<tr><td>Abschick Counter:</td><td class="sendTime">-</td>')
+                    .find('tr').last().after('<tr><td>Abschick Counter:</td><td class="sendTime">-</td>');
+
+                // Toggle-Button einfügen, falls noch nicht vorhanden
+                if ($('#autoSendToggle').length === 0) {
+                    $('.sendTime').parent().append(
+                        '<button id="autoSendToggle" type="button" style="margin-left:10px;">Auto-Senden: AUS</button>'
+                    );
+                    $('#autoSendToggle')
+                        .css('background', '#f44336')
+                        .css('color', '#fff');
+                    $('#autoSendToggle').on('click', function() {
+                        autoSendEnabled = !autoSendEnabled;
+                        $(this)
+                            .text('Auto-Senden: ' + (autoSendEnabled ? 'AN' : 'AUS'))
+                            .css('background', autoSendEnabled ? '#4caf50' : '#f44336')
+                            .css('color', '#fff');
+                    });
+                }
+
+                $('form[action*="action=command"]').find('table').first()
                     .closest('table').after($cc.find('table').parent().html() + '<br><div style="clear:both;"></div>')
                     .next().css({
                         'float': 'right',
@@ -53,58 +75,63 @@ function initCommandUI() {
                         'max-height': $('form[action*="action=command"]').find('table').first().height(),
                         'overflow': 'scroll'
                     }).find('tr.command-row').on('click', function () {
-    var $this = $(this);
+                        var $this = $(this);
 
-    var durationText = $('form[action*="action=command"]').find('table')
-        .find('td:contains("Dauer:"),td:contains("Duur:"),td:contains("Duration:")').next().text().trim();
+                        var durationText = $('form[action*="action=command"]').find('table')
+                            .find('td:contains("Dauer:"),td:contains("Duur:"),td:contains("Duration:")').next().text().trim();
 
-    var duration = durationText.split(':');
-    var h = parseInt(duration[0], 10) || 0;
-    var m = parseInt(duration[1], 10) || 0;
-    var s = parseInt(duration[2], 10) || 0;
-    var durationInSeconds = h * 3600 + m * 60 + s;
+                        var duration = durationText.split(':');
+                        var h = parseInt(duration[0], 10) || 0;
+                        var m = parseInt(duration[1], 10) || 0;
+                        var s = parseInt(duration[2], 10) || 0;
+                        var durationInSeconds = h * 3600 + m * 60 + s;
 
-    var endTime = parseInt($this.find('span.timer').data('endtime'), 10);
+                        var endTime = parseInt($this.find('span.timer').data('endtime'), 10);
 
-    if (isNaN(endTime) || durationInSeconds === 0) {
-        $('.sendTime').html('Keine gültigen Zeitdaten');
-        clearTabCountdown();
-        return;
-    }
+                        if (isNaN(endTime) || durationInSeconds === 0) {
+                            $('.sendTime').html('Keine gültigen Zeitdaten');
+                            clearTabCountdown();
+                            return;
+                        }
 
-    var sendTime = endTime - durationInSeconds;
+                        var sendTime = endTime - durationInSeconds;
 
-    // Vorherigen Tab-Countdown stoppen
-    clearTabCountdown();
+                        // Vorherigen Observer stoppen
+                        clearTabCountdown();
 
-    // Neuer, präziser Countdown + Autoklick
-    countdownInterval = setInterval(function() {
-    let now = Math.ceil(Date.now() / 1000); // <- das ist der entscheidende Unterschied!
-    let left = sendTime - now;
-    document.title = "⏰ Abschick in " + formatCountdown(left >= 0 ? left : 0);
+                        // Sofortiger Startwert im Titel
+                        let now = Math.floor(Date.now() / 1000);
+                        let left = sendTime - now;
+                        document.title = "⏰ Abschick in " + formatCountdown(left);
 
-    if (now >= sendTime) {
-        clearTabCountdown();
-        let $btn = $('#troop_confirm_submit');
-        if ($btn.length && $btn.is(':visible') && !$btn.prop('disabled')) {
-            $btn.click();
-        }
-    }
-}, 100); // 100ms Takt
+                        $this.closest('table').find('td').css('background-color', '');
+                        $this.find('td').css('background-color', '#FFF68F');
+                        $('.sendTime').html(
+                            formatTimes(sendTime) + ' (<span class="sendTimer" data-endtime="' + sendTime + '">-</span>)'
+                        );
+                        Timing.tickHandlers.timers.initTimers('sendTimer');
 
-
-    // Sofortiger Startwert im Titel
-    let now = Math.floor(Date.now() / 1000);
-    let left = sendTime - now;
-    document.title = "⏰ Abschick in " + formatCountdown(left);
-
-    $this.closest('table').find('td').css('background-color', '');
-    $this.find('td').css('background-color', '#FFF68F');
-    $('.sendTime').html(
-        formatTimes(sendTime) + ' (<span class="sendTimer" data-endtime="' + sendTime + '"></span>)'
-    );
-    Timing.tickHandlers.timers.initTimers('sendTimer');
-}).filter(function () {
+                        // Richtiges <span> selektieren (exakt wie im DOM)
+                        let sendTimerElem = $('.sendTime .sendTimer')[0];
+                        if (sendTimerElem) {
+                            autoSendObserver = new MutationObserver(function(mutations) {
+                                mutations.forEach(function(mutation) {
+                                    // Korrekt auf "0:00:00" prüfen
+                                    if (
+                                        autoSendEnabled &&
+                                        (sendTimerElem.textContent.trim() === "0:00:00")
+                                    ) {
+                                        let $btn = $('#troop_confirm_submit');
+                                        if ($btn.length && $btn.is(':visible') && !$btn.prop('disabled')) {
+                                            $btn.click();
+                                            clearTabCountdown();
+                                        }
+                                    }
+                                });
+                            });
+                            autoSendObserver.observe(sendTimerElem, { childList: true, characterData: true, subtree: true });
+                        }
+                    }).filter(function () {
                         return $('img[src*="/return_"], img[src*="/back.png"]', this).length > 0;
                     }).remove();
 
