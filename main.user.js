@@ -18,7 +18,11 @@
 
     const page = new URL(location.href).searchParams.get("screen") || '';
 
-    const useLocal = true; // auf true stellen für lokale Entwicklung
+    const useLocal = GM_info && GM_info.script && (
+        (GM_info.script.updateURL && GM_info.script.updateURL.startsWith("http://localhost")) ||
+        (GM_info.script.downloadURL && GM_info.script.downloadURL.startsWith("http://localhost"))
+    );
+
     // Webserver starten mit:   python3 -m http.server 8123
 
     const modules = {
