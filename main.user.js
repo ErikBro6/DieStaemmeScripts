@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SpeckMichs Die Stämme Tool Collection
 // @namespace    https://github.com/deinname/ds-tools
-// @version      1.2
+// @version      1.3
 // @description  Erweitert die Die Stämme Erfahrung mit einigen Tools und Skripten
 // @author       SpeckMich
 // @connect      raw.githubusercontent.com
@@ -12,78 +12,49 @@
 // @grant        GM_xmlhttpRequest
 // @run-at       document-end
 // ==/UserScript==
-
 (function() {
     'use strict';
 
-    const page = new URL(location.href).searchParams.get("screen") || '';
-
-    const useLocal = GM_info && GM_info.script && (
-        (GM_info.script.updateURL && GM_info.script.updateURL.startsWith("http://localhost")) ||
-        (GM_info.script.downloadURL && GM_info.script.downloadURL.startsWith("http://localhost"))
-    );
-
-    // Webserver starten mit:   python3 -m http.server 8123
-
-    const modules = {
-        place: useLocal
-            ? "http://localhost:8123/modules/babaFarmer.js"
-            : "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/babaFarmer.js",        
-        map: useLocal
-            ? "http://localhost:8123/modules/confirmEnhancer.js"
-            : "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/confirmEnhancer.js",
+    window.modules = {
+        place: "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/babaFarmer.js",
+        map: "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/confirmEnhancer.js",
         market: {
-            resource_balancer: useLocal
-                ? "http://localhost:8123/modules/resBalancer.js"
-                : "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/resBalancer.js",
-        
-            default: useLocal
-                ? "http://localhost:8123/menu/resBalancerMenuPoint.js"
-                : "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/menu/resBalancerMenuPoint.js"
+            resource_balancer: "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/resBalancer.js",
+            default: "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/menu/resBalancerMenuPoint.js"
         }
     };
 
+    window.loadModules = function() {
+        const urlParams = new URL(location.href).searchParams;
+        const screen = urlParams.get("screen") || '';
+        const mode = urlParams.get("mode") || '';
 
-
-    const urlParams = new URL(location.href).searchParams;
-    const screen = urlParams.get("screen") || '';
-    const mode = urlParams.get("mode") || '';
-
-    let moduleUrl = null;
-
-    if (screen === "market") {
-        // Prüfe auf spezifische Modes
-        if (modules.market[mode]) {
-            moduleUrl = modules.market[mode];
-        }
-        // Optional: Fallback für alle anderen Market-Modes
-        else if (modules.market.default) {
-            moduleUrl = modules.market.default;
-        }
-    } else if (modules[screen]) {
-        moduleUrl = modules[screen];
-    }
-
-    // Optional: public_report usw. wie gehabt
-    if (!moduleUrl && location.pathname.includes('/public_report/')) {
-        moduleUrl = modules['public_report'];
-    }
-
-
-    if (moduleUrl) {
-        GM_xmlhttpRequest({
-            method: 'GET',
-            url: moduleUrl,
-            onload: function(response) {
-                try {
-                    eval(response.responseText);
-                } catch (e) {
-                    console.error('Fehler beim Laden des Moduls:', e);
-                }
-            },
-            onerror: function(err) {
-                console.error('Fehler beim Laden des Moduls:', err);
+        let moduleUrl = null;
+        if (screen === "market") {
+            if (window.modules.market[mode]) {
+                moduleUrl = window.modules.market[mode];
+            } else if (window.modules.market.default) {
+                moduleUrl = window.modules.market.default;
             }
-        });
-    }
+        } else if (window.modules[screen]) {
+            moduleUrl = window.modules[screen];
+        }
+
+        if (moduleUrl) {
+            GM_xmlhttpRequest({
+                method: 'GET',
+                url: moduleUrl,
+                onload: function(response) {
+                    try {
+                        eval(response.responseText);
+                    } catch (e) {
+                        console.error('Fehler beim Laden des Moduls:', e);
+                    }
+                },
+                onerror: function(err) {
+                    console.error('Fehler beim Laden des Moduls:', err);
+                }
+            });
+        }
+    };
 })();

@@ -1,8 +1,9 @@
-console.log("aha");
+console.log("Production Skript");
 
 let sendTimeInit = false;      // Flag zur Initialisierung
 let autoSendEnabled = false;   // Default aus
 let autoSendObserver = null;   // Für DOM-Observer
+let sendInterval = null;
 
 function formatTimes(e) {
     function t(e) {
@@ -21,13 +22,6 @@ function formatCountdown(sec) {
     return h + ":" + (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
 }
 
-function clearTabCountdown() {
-    if (autoSendObserver) {
-        autoSendObserver.disconnect();
-        autoSendObserver = null;
-    }
-    document.title = "Stämme"; // Oder Wunschtitel
-}
 
 function initCommandUI() {
     if (
@@ -51,6 +45,9 @@ function initCommandUI() {
 
                 // Toggle-Button einfügen, falls noch nicht vorhanden
                 if ($('#autoSendToggle').length === 0) {
+                
+                    $('.sendTime').after('<input type="text" id="arrivalTimeInput" placeholder="Ankunft (YYYY-MM-DD HH:MM:SS)" style="margin-left:10px;width:200px;"> <button id="startArrivalSend" type="button">Auf Ankunft senden</button>');
+
                     $('.sendTime').parent().append(
                         '<button id="autoSendToggle" type="button" style="margin-left:10px;">Auto-Senden: AUS</button>'
                     );
@@ -116,6 +113,7 @@ function initCommandUI() {
                         if (sendTimerElem) {
                             autoSendObserver = new MutationObserver(function(mutations) {
                                 mutations.forEach(function(mutation) {
+                                    console.log('Mutation:', mutation, sendTimerElem.textContent); // <--- Debug!
                                     // Korrekt auf "0:00:00" prüfen
                                     if (
                                         autoSendEnabled &&
@@ -137,6 +135,31 @@ function initCommandUI() {
 
                 $('.widget-command-timer').addClass('timer');
                 Timing.tickHandlers.timers.initTimers('widget-command-timer');
+                $('#startArrivalSend').on('click', function() {
+    let arrivalStr = $('#arrivalTimeInput').val();
+    if (!arrivalStr.match(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/)) {
+        alert('Ungültiges Zeitformat');
+        return;
+    }
+    let arrivalTime = new Date(arrivalStr.replace(' ', 'T')); // ISO-Format hack
+    let arrivalEpoch = Math.floor(arrivalTime.getTime() / 1000);
+
+    // Dauer holen (wie bisher)
+    let durationText = $('form[action*="action=command"]').find('table')
+        .find('td:contains("Dauer:"),td:contains("Duur:"),td:contains("Duration:")').next().text().trim();
+    let [h, m, s] = durationText.split(':').map(e => parseInt(e, 10) || 0);
+    let durationInSeconds = h * 3600 + m * 60 + s;
+
+    let sendEpoch = arrivalEpoch - durationInSeconds;
+
+    if (sendEpoch < Math.floor(Date.now() / 1000)) {
+        alert('Abschickzeit liegt in der Vergangenheit!');
+        return;
+    }
+
+    scheduleSend(sendEpoch);
+});
+
             } else {
                 UI.ErrorMessage('Keine Befehle gefunden');
                 clearTabCountdown();
@@ -144,6 +167,37 @@ function initCommandUI() {
         });
     }
 }
+function scheduleSend(sendEpoch) {
+    clearTabCountdown();
+    sendInterval = setInterval(function() {
+        let now = Math.floor(Date.now() / 1000);
+        let left = sendEpoch - now;
+        document.title = "⏰ Abschick in " + formatCountdown(left);
+
+        if (left <= 0) {
+            clearInterval(sendInterval);
+            sendInterval = null;
+            let $btn = $('#troop_confirm_submit');
+            if ($btn.length && $btn.is(':visible') && !$btn.prop('disabled')) {
+                $btn.click();
+                clearTabCountdown();
+            }
+        }
+    }, 200);
+}
+function clearTabCountdown() {
+    if (sendInterval !== null) {
+        clearInterval(sendInterval);
+    }
+    sendInterval = null;
+    if (autoSendObserver) {
+        autoSendObserver.disconnect();
+        autoSendObserver = null;
+    }
+    document.title = "Stämme";
+}
+
+
 
 function isVisible($el) {
     return $el.length > 0 && $el.is(':visible');
@@ -155,7 +209,9 @@ const observer = new MutationObserver(function () {
         initCommandUI();
     } else {
         sendTimeInit = false; // Flag zurücksetzen, falls das Element wieder entfernt wird
-        clearTabCountdown();
+            clearTabCountdown();
+
+        
     }
 });
 
