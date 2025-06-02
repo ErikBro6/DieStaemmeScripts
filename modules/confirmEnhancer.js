@@ -1,5 +1,3 @@
-console.log("Production Skript");
-
 let sendTimeInit = false;      // Flag zur Initialisierung
 let autoSendEnabled = false;   // Default aus
 let autoSendObserver = null;   // Für DOM-Observer
@@ -46,7 +44,18 @@ function initCommandUI() {
                 // Toggle-Button einfügen, falls noch nicht vorhanden
                 if ($('#autoSendToggle').length === 0) {
                 
-                    $('.sendTime').after('<input type="text" id="arrivalTimeInput" placeholder="Ankunft (YYYY-MM-DD HH:MM:SS)" style="margin-left:10px;width:200px;"> <button id="startArrivalSend" type="button">Auf Ankunft senden</button>');
+                    $('.sendTime').after(`
+                        <input type="number" id="arrivalDay" min="1" max="31" placeholder="TT" style="width:40px;margin-left:10px;">
+                        .
+                        <input type="number" id="arrivalMonth" min="1" max="12" placeholder="MM" style="width:40px;">
+                        <input type="number" id="arrivalHour" min="0" max="23" placeholder="HH" style="width:40px;">
+                        :
+                        <input type="number" id="arrivalMinute" min="0" max="59" placeholder="MM" style="width:40px;">
+                        :
+                        <input type="number" id="arrivalSecond" min="0" max="59" placeholder="SS" style="width:40px;">
+                        <button id="startArrivalSend" type="button">Auf Ankunft senden</button>
+                    `);
+
 
                     $('.sendTime').parent().append(
                         '<button id="autoSendToggle" type="button" style="margin-left:10px;">Auto-Senden: AUS</button>'
@@ -84,6 +93,13 @@ function initCommandUI() {
                         var durationInSeconds = h * 3600 + m * 60 + s;
 
                         var endTime = parseInt($this.find('span.timer').data('endtime'), 10);
+                        // ArrivalTime Felder befüllen (sofern vorhanden)
+                        let arrivalDate = new Date(endTime * 1000);
+                        $('#arrivalDay').val(arrivalDate.getDate());
+                        $('#arrivalMonth').val(arrivalDate.getMonth() + 1);
+                        $('#arrivalHour').val(arrivalDate.getHours());
+                        $('#arrivalMinute').val(arrivalDate.getMinutes());
+                        $('#arrivalSecond').val(arrivalDate.getSeconds());
 
                         if (isNaN(endTime) || durationInSeconds === 0) {
                             $('.sendTime').html('Keine gültigen Zeitdaten');
@@ -135,13 +151,24 @@ function initCommandUI() {
 
                 $('.widget-command-timer').addClass('timer');
                 Timing.tickHandlers.timers.initTimers('widget-command-timer');
-                $('#startArrivalSend').on('click', function() {
-    let arrivalStr = $('#arrivalTimeInput').val();
-    if (!arrivalStr.match(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/)) {
-        alert('Ungültiges Zeitformat');
+$('#startArrivalSend').on('click', function() {
+    let year = new Date().getFullYear();
+    let day = parseInt($('#arrivalDay').val(), 10);
+    let month = parseInt($('#arrivalMonth').val(), 10);
+    let hour = parseInt($('#arrivalHour').val(), 10);
+    let minute = parseInt($('#arrivalMinute').val(), 10);
+    let second = parseInt($('#arrivalSecond').val(), 10);
+
+    if (
+        isNaN(day) || isNaN(month) || isNaN(hour) ||
+        isNaN(minute) || isNaN(second)
+    ) {
+        alert('Bitte alle Felder ausfüllen!');
         return;
     }
-    let arrivalTime = new Date(arrivalStr.replace(' ', 'T')); // ISO-Format hack
+
+    // Jahr wie oben, falls du kein Jahr-Feld hast
+    let arrivalTime = new Date(year, month - 1, day, hour, minute, second);
     let arrivalEpoch = Math.floor(arrivalTime.getTime() / 1000);
 
     // Dauer holen (wie bisher)
@@ -159,6 +186,7 @@ function initCommandUI() {
 
     scheduleSend(sendEpoch);
 });
+
 
             } else {
                 UI.ErrorMessage('Keine Befehle gefunden');
