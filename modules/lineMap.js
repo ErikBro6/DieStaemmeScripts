@@ -33,9 +33,7 @@ win.TWLD_continents = 16;
 
 // import data from website
 win.TWLD_data = [
-// [world, link]
-// ["en1337", "https://google.de"]
-["de240", "https://browndy.github.io/DieStämme-Stuff/TW%20Line%20Drawer/Test/test.js"]
+ ["de240", "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/refs/heads/master/maps/korridore.js"],
 ];
 
 (function () {
@@ -87,7 +85,7 @@ win.TWLD_data = [
 	const data = win.TWLD_data || [
 		// [world, link]
 		// ["de197", "https://google.de"]
-		["de240", "https://browndy.github.io/DieStämme-Stuff/TW%20Line%20Drawer/Test/test.js"]
+		["de240", "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/refs/heads/master/maps/korridore.js"],
 		
 	];
 
