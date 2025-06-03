@@ -1,3 +1,4 @@
+
 let sendTimeInit = false;      // Flag zur Initialisierung
 let autoSendEnabled = false;   // Default aus
 let autoSendObserver = null;   // Für DOM-Observer
@@ -39,7 +40,7 @@ function initCommandUI() {
                 // Abschick Counter einfügen
                 $('form[action*="action=command"]').find('table').first()
                     .css('float', 'left')
-                    .find('tr').last().after('<tr><td>Abschick Counter:</td><td class="sendTime">-</td>');
+                    .find('tr').last().after('<tr><td>Abschick-Counter:</td><td class="sendTime">-</td>');
 
                 // Toggle-Button einfügen, falls noch nicht vorhanden
                 if ($('#autoSendToggle').length === 0) {
@@ -245,8 +246,8 @@ const observer = new MutationObserver(function () {
 
 // Beobachte body dauerhaft
 observer.observe(document.body, { childList: true, subtree: true });
-
 // Direkt beim Laden prüfen
 if (isVisible($('#troop_confirm_submit'))) {
     initCommandUI();
+    console.log("Confirm Enhancer Startet");
 }

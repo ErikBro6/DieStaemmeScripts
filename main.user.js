@@ -12,48 +12,75 @@
 // @grant        GM_xmlhttpRequest
 // @run-at       document-end
 // ==/UserScript==
+
+
 (function() {
     'use strict';
-
     window.modules = {
         place: "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/babaFarmer.js",
-        map: "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/confirmEnhancer.js",
-        market: {
-            resource_balancer: "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/resBalancer.js",
-            default: "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/menu/resBalancerMenuPoint.js"
-        }
+        map: [
+            "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/confirmEnhancer.js",
+            "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/lineMap.js"
+        ],
+        market: [
+            "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/resBalancer.js",
+            "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/menu/resBalancerMenuPoint.js"
+        ]
     };
+
+
+    function cacheBust(url) {
+        return url + (url.includes('?') ? '&' : '?') + '_cb=' + Date.now();
+    }
+
 
     window.loadModules = function() {
         const urlParams = new URL(location.href).searchParams;
         const screen = urlParams.get("screen") || '';
         const mode = urlParams.get("mode") || '';
+        let moduleUrls = [];
 
         let moduleUrl = null;
-        if (screen === "market") {
-            if (window.modules.market[mode]) {
-                moduleUrl = window.modules.market[mode];
-            } else if (window.modules.market.default) {
-                moduleUrl = window.modules.market.default;
-            }
-        } else if (window.modules[screen]) {
-            moduleUrl = window.modules[screen];
+        switch (screen) {
+            case "market":
+                if (window.modules.market[mode]) {
+                    moduleUrls = [window.modules.market[mode]];
+                } else if (window.modules.market.default) {
+                    moduleUrls = [window.modules.market.default];
+                }
+                break;
+            case "map":
+                if (Array.isArray(window.modules.map)) {
+                    moduleUrls = window.modules.map;
+                } else if (window.modules.map) {
+                    moduleUrls = [window.modules.map];
+                }
+                break;
+            default:
+                if (window.modules[screen]) {
+                    moduleUrls = [window.modules[screen]];
+                }
         }
 
-        if (moduleUrl) {
-            GM_xmlhttpRequest({
-                method: 'GET',
-                url: moduleUrl,
-                onload: function(response) {
-                    try {
-                        eval(response.responseText);
-                    } catch (e) {
-                        console.error('Fehler beim Laden des Moduls:', e);
+
+        if (moduleUrls.length > 0) {
+            moduleUrls.forEach(moduleUrl => {
+                console.log(moduleUrl);
+                GM_xmlhttpRequest({
+                    method: 'GET',
+                    url: cacheBust(moduleUrl),
+                    onload: function(response) {
+                        try {
+                            console.log(response)
+                            eval(response.responseText);
+                        } catch (e) {
+                            console.error('Fehler beim Laden des Moduls:', e);
+                        }
+                    },
+                    onerror: function(err) {
+                        console.error('Fehler beim Laden des Moduls:', err);
                     }
-                },
-                onerror: function(err) {
-                    console.error('Fehler beim Laden des Moduls:', err);
-                }
+                });
             });
         }
     };

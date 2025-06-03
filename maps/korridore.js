@@ -1,0 +1,1 @@
+[{"name":"Testkorri","mapColor":"#ffffff","mapWidth":"5px","drawOnMini":true,"miniColor":"#ffffff","miniWidth":"2px","lines":[[[[562,606],[555,606],[562,606],[562,612],[555,612]]],[[[560,615],[556,615],[564,613]]]],"labelsColor":"#ffffff","labelsFontSize":"bold 16px","labelsRoot":"center","labels":[[[560,608],"SpeckMich"]],"selected":false,"show":true}]
