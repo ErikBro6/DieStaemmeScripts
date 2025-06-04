@@ -45,17 +45,20 @@ function initCommandUI() {
                 // Toggle-Button einfügen, falls noch nicht vorhanden
                 if ($('#autoSendToggle').length === 0) {
                 
-                    $('.sendTime').after(`
-                        <input type="number" id="arrivalDay" min="1" max="31" placeholder="TT" style="width:40px;margin-left:10px;">
-                        .
-                        <input type="number" id="arrivalMonth" min="1" max="12" placeholder="MM" style="width:40px;">
-                        <input type="number" id="arrivalHour" min="0" max="23" placeholder="HH" style="width:40px;">
-                        :
-                        <input type="number" id="arrivalMinute" min="0" max="59" placeholder="MM" style="width:40px;">
-                        :
-                        <input type="number" id="arrivalSecond" min="0" max="59" placeholder="SS" style="width:40px;">
-                        <button id="startArrivalSend" type="button">Auf Ankunft senden</button>
+                    $('form[action*="action=command"]').find('table').first().find('tr').last().after(`
+                        <tr>
+                            <td style="white-space: nowrap;">Ankunftszeit:</td>
+                            <td style="white-space: nowrap;">
+                                <input type="number" id="arrivalDay" min="1" max="31" placeholder="TT" style="width:40px;"> .
+                                <input type="number" id="arrivalMonth" min="1" max="12" placeholder="MM" style="width:40px;">&nbsp;
+                                <input type="number" id="arrivalHour" min="0" max="23" placeholder="HH" style="width:40px;"> :
+                                <input type="number" id="arrivalMinute" min="0" max="59" placeholder="MM" style="width:40px;"> :
+                                <input type="number" id="arrivalSecond" min="0" max="59" placeholder="SS" style="width:40px;">
+                            </td>
+                        </tr>
                     `);
+
+
 
 
                     $('.sendTime').parent().append(
