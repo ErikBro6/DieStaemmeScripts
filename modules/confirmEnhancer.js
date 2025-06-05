@@ -289,7 +289,7 @@ function startAutoSendObserver() {
                     $btn.click();
                     clearTabCountdown();
                 }
-            }, 500);
+            }, Math.random() * (600 - 400) + 400);
         }
     });
     autoSendObserver.observe(countdownElem, { childList: true, characterData: true, subtree: true });
