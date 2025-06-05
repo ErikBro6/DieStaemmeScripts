@@ -1,235 +1,306 @@
+let sendTimeInit = false;
+let autoSendEnabled = false;
+let autoSendObserver = null;
 
-let sendTimeInit = false;      // Flag zur Initialisierung
-let autoSendEnabled = false;   // Default aus
-let autoSendObserver = null;   // Für DOM-Observer
-let sendInterval = null;
-
-function formatTimes(e) {
-    function t(e) {
-        for (var t = "" + e; t.length < 2;) t = "0" + t;
-        return t;
+function formatTimes(epoch) {
+    function z(n) {
+        let s = "" + n;
+        while (s.length < 2) s = "0" + s;
+        return s;
     }
-    var n = new Date(1e3 * e);
-    return t(n.getDate()) + "." + t(n.getMonth() + 1) + " " + t(n.getHours()) + ":" + t(n.getMinutes()) + ":" + t(n.getSeconds());
+    let d = new Date(epoch * 1000);
+    return z(d.getDate()) + "." + z(d.getMonth() + 1) +
+           " " + z(d.getHours()) + ":" + z(d.getMinutes()) + ":" + z(d.getSeconds());
 }
-
-function formatCountdown(sec) {
-    if (sec < 0) return '0:00:00';
-    let h = Math.floor(sec / 3600);
-    let m = Math.floor((sec % 3600) / 60);
-    let s = sec % 60;
-    return h + ":" + (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
-}
-
 
 function initCommandUI() {
     if (
-        (game_data.screen == 'map' || game_data.screen == 'place') &&
+        (game_data.screen === 'map' || game_data.screen === 'place') &&
         $('#place_confirm_units').length > 0 &&
-        $('.sendTime').length == 0 &&
+        $('.sendTime').length === 0 &&
         !sendTimeInit
     ) {
         sendTimeInit = true;
-        $.get($('.village_anchor').first().find('a').first().attr('href'), function (html) {
-            var $cc = $(html).find('.commands-container');
-            if ($cc.length > 0) {
-                var w = (game_data.screen == 'map')
+
+        $.get(
+            $('.village_anchor').first().find('a').first().attr('href'),
+            function (html) {
+                let $cc = $(html).find('.commands-container');
+                let $commandTable = $('form[action*="action=command"]').find('table').first();
+                let w = (game_data.screen === 'map')
                     ? '100%'
-                    : ($('#content_value').width() - $('form[action*="action=command"]').find('table').first().width() - 10) + 'px';
+                    : ($('#content_value').width() - $commandTable.width() - 10) + 'px';
 
-                // Abschick Counter einfügen
-                $('form[action*="action=command"]').find('table').first()
+                // 1) „Abschick Counter“-Zelle einfügen
+                $commandTable
                     .css('float', 'left')
-                    .find('tr').last().after('<tr><td>Abschick-Counter:</td><td class="sendTime">-</td>');
+                    .find('tr').last()
+                    .after('<tr><td>Abschick Counter:</td><td class="sendTime">-</td></tr>');
 
-                // Toggle-Button einfügen, falls noch nicht vorhanden
+                // 3) Ankunftszeit-Eingaben (Tag, Monat, Stunde, Minute, Sekunde)
+                $commandTable.find('tr').last().after(`
+                    <tr>
+                        <td style="white-space: nowrap;">Ankunftszeit:</td>
+                        <td style="white-space: nowrap;">
+                            <input type="number" id="arrivalDay"   min="1" max="31" placeholder="TT" style="width:40px;"> .
+                            <input type="number" id="arrivalMonth" min="1" max="12" placeholder="MM" style="width:40px;">&nbsp;
+                            <input type="number" id="arrivalHour"  min="0" max="23" placeholder="HH" style="width:40px;"> :
+                            <input type="number" id="arrivalMinute"min="0" max="59" placeholder="MM" style="width:40px;"> :
+                            <input type="number" id="arrivalSecond"min="0" max="59" placeholder="SS" style="width:40px;">
+                        </td>
+                    </tr>
+                `);
+
+                // 3a) Felder für Tag/Monat sofort mit heutigem Datum befüllen
+                let jetzt = new Date();
+                $('#arrivalDay').val(jetzt.getDate());
+                $('#arrivalMonth').val(jetzt.getMonth() + 1);
+
+                // 4) Auto-Senden-Button (falls nicht vorhanden)
                 if ($('#autoSendToggle').length === 0) {
-                
-                    $('form[action*="action=command"]').find('table').first().find('tr').last().after(`
+                    $commandTable.find('tr').last().after(`
                         <tr>
-                            <td style="white-space: nowrap;">Ankunftszeit:</td>
-                            <td style="white-space: nowrap;">
-                                <input type="number" id="arrivalDay" min="1" max="31" placeholder="TT" style="width:40px;"> .
-                                <input type="number" id="arrivalMonth" min="1" max="12" placeholder="MM" style="width:40px;">&nbsp;
-                                <input type="number" id="arrivalHour" min="0" max="23" placeholder="HH" style="width:40px;"> :
-                                <input type="number" id="arrivalMinute" min="0" max="59" placeholder="MM" style="width:40px;"> :
-                                <input type="number" id="arrivalSecond" min="0" max="59" placeholder="SS" style="width:40px;">
+                            <td style="white-space: nowrap;">&nbsp;</td>
+                            <td>
+                                <button id="autoSendToggle" type="button" style="margin-left:10px;">Auto-Senden: AUS</button>
                             </td>
                         </tr>
                     `);
-
-
-
-
-                    $('.sendTime').parent().append(
-                        '<button id="autoSendToggle" type="button" style="margin-left:10px;">Auto-Senden: AUS</button>'
-                    );
                     $('#autoSendToggle')
                         .css('background', '#f44336')
-                        .css('color', '#fff');
-                    $('#autoSendToggle').on('click', function() {
-                        autoSendEnabled = !autoSendEnabled;
-                        $(this)
-                            .text('Auto-Senden: ' + (autoSendEnabled ? 'AN' : 'AUS'))
-                            .css('background', autoSendEnabled ? '#4caf50' : '#f44336')
-                            .css('color', '#fff');
-                    });
+                        .css('color', '#fff')
+                        .on('click', function () {
+                            autoSendEnabled = !autoSendEnabled;
+                            $(this)
+                                .text('Auto-Senden: ' + (autoSendEnabled ? 'AN' : 'AUS'))
+                                .css('background', autoSendEnabled ? '#4caf50' : '#f44336');
+
+                            if (autoSendEnabled) {
+                                startAutoSendObserver();
+                            } else {
+                                stopAutoSendObserver();
+                            }
+                        });
                 }
 
-                $('form[action*="action=command"]').find('table').first()
-                    .closest('table').after($cc.find('table').parent().html() + '<br><div style="clear:both;"></div>')
-                    .next().css({
-                        'float': 'right',
-                        'width': w,
-                        'display': 'block',
-                        'max-height': $('form[action*="action=command"]').find('table').first().height(),
-                        'overflow': 'scroll'
-                    }).find('tr.command-row').on('click', function () {
-                        var $this = $(this);
+                // 5) Listener für Änderung der Ankunftszeit-Eingaben (aktualisiert Countdown)
+                $('#arrivalDay, #arrivalMonth, #arrivalHour, #arrivalMinute, #arrivalSecond').on('change', function() {
+                    manualUpdateCountdown();
+                });
 
-                        var durationText = $('form[action*="action=command"]').find('table')
-                            .find('td:contains("Dauer:"),td:contains("Duur:"),td:contains("Duration:")').next().text().trim();
+                // 6) Wenn Commands vorhanden sind: Panel andocken + Klick-Handler
+                if ($cc.length > 0) {
+                    $commandTable
+                        .closest('table')
+                        .after($cc.find('table').parent().html() + '<br><div style="clear:both;"></div>')
+                        .next().css({
+                            'float': 'right',
+                            'width': w,
+                            'display': 'block',
+                            'max-height': $commandTable.height(),
+                            'overflow': 'scroll'
+                        })
+                        .find('tr.command-row')
+                        .on('click', function () {
+                            let $this = $(this);
 
-                        var duration = durationText.split(':');
-                        var h = parseInt(duration[0], 10) || 0;
-                        var m = parseInt(duration[1], 10) || 0;
-                        var s = parseInt(duration[2], 10) || 0;
-                        var durationInSeconds = h * 3600 + m * 60 + s;
+                            // a) Dauer auslesen
+                            let durationText = $commandTable
+                                .find('td:contains("Dauer:"),td:contains("Duur:"),td:contains("Duration:")')
+                                .next().text().trim();
+                            let [h, m, s] = durationText.split(':').map(x => parseInt(x, 10) || 0);
+                            let durationInSeconds = h * 3600 + m * 60 + s;
 
-                        var endTime = parseInt($this.find('span.timer').data('endtime'), 10);
-                        // ArrivalTime Felder befüllen (sofern vorhanden)
-                        let arrivalDate = new Date(endTime * 1000);
-                        $('#arrivalDay').val(arrivalDate.getDate());
-                        $('#arrivalMonth').val(arrivalDate.getMonth() + 1);
-                        $('#arrivalHour').val(arrivalDate.getHours());
-                        $('#arrivalMinute').val(arrivalDate.getMinutes());
-                        $('#arrivalSecond').val(arrivalDate.getSeconds());
+                            // b) Endzeit aus <span class="timer">
+                            let endTime = parseInt($this.find('span.timer').data('endtime'), 10);
+                            if (isNaN(endTime) || durationInSeconds === 0) {
+                                $('.sendTime').html('Keine gültigen Zeitdaten');
+                                $('#sendCountdown')?.remove();
+                                clearTabCountdown();
+                                return;
+                            }
 
-                        if (isNaN(endTime) || durationInSeconds === 0) {
-                            $('.sendTime').html('Keine gültigen Zeitdaten');
+                            // c) Ankunftszeit in Input-Felder schreiben (Tag/Monat bleiben auf heute gesetzt, 
+                            //    außer das Command gibt ein anderes Datum vor – dann überschreiben wir trotzdem)
+                            let arrivalDate = new Date(endTime * 1000);
+                            $('#arrivalDay').val(arrivalDate.getDate());
+                            $('#arrivalMonth').val(arrivalDate.getMonth() + 1);
+                            $('#arrivalHour').val(arrivalDate.getHours());
+                            $('#arrivalMinute').val(arrivalDate.getMinutes());
+                            $('#arrivalSecond').val(arrivalDate.getSeconds());
+
+                            // d) Sendepunkt berechnen
+                            let sendTime = endTime - durationInSeconds;
+
+                            // e) Vorherige Timer/Observer stoppen
                             clearTabCountdown();
-                            return;
-                        }
 
-                        var sendTime = endTime - durationInSeconds;
+                            // f) Abschick Counter anzeigen (Datum/Uhrzeit + Countdown-Span)
+                            $('.sendTime').html(
+                                formatTimes(sendTime) +
+                                ' (<span id="sendCountdown" class="sendTimer" data-endtime="' + sendTime + '">-</span>)'
+                            );
 
-                        // Vorherigen Observer stoppen
-                        clearTabCountdown();
+                            // g) TribalWars internen Timer für <span class="sendTimer"> starten
+                            Timing.tickHandlers.timers.initTimers('sendTimer');
 
-                        // Sofortiger Startwert im Titel
-                        let now = Math.floor(Date.now() / 1000);
-                        let left = sendTime - now;
-                        document.title = "⏰ Abschick in " + formatCountdown(left);
+                            // h) Auto-Send-Observer starten, falls aktiviert
+                            if (autoSendEnabled) {
+                                startAutoSendObserver();
+                            }
 
-                        $this.closest('table').find('td').css('background-color', '');
-                        $this.find('td').css('background-color', '#FFF68F');
-                        $('.sendTime').html(
-                            formatTimes(sendTime) + ' (<span class="sendTimer" data-endtime="' + sendTime + '">-</span>)'
-                        );
-                        Timing.tickHandlers.timers.initTimers('sendTimer');
+                            // i) Betroffene Zeile hervorheben
+                            $this.closest('table').find('td').css('background-color', '');
+                            $this.find('td').css('background-color', '#FFF68F');
+                        })
+                        .filter(function () {
+                            // Zeilen mit Rückkehr-Icons entfernen
+                            return $(this).find('img[src*="/return_"], img[src*="/back.png"]').length > 0;
+                        }).remove();
 
-                        // Richtiges <span> selektieren (exakt wie im DOM)
-                        let sendTimerElem = $('.sendTime .sendTimer')[0];
-                        if (sendTimerElem) {
-                            autoSendObserver = new MutationObserver(function(mutations) {
-                                mutations.forEach(function(mutation) {
-                                    console.log('Mutation:', mutation, sendTimerElem.textContent); // <--- Debug!
-                                    // Korrekt auf "0:00:00" prüfen
-                                    if (
-                                        autoSendEnabled &&
-                                        (sendTimerElem.textContent.trim() === "0:00:00")
-                                    ) {
-                                        let $btn = $('#troop_confirm_submit');
-                                        if ($btn.length && $btn.is(':visible') && !$btn.prop('disabled')) {
-                                            $btn.click();
-                                            clearTabCountdown();
-                                        }
-                                    }
-                                });
-                            });
-                            autoSendObserver.observe(sendTimerElem, { childList: true, characterData: true, subtree: true });
-                        }
-                    }).filter(function () {
-                        return $('img[src*="/return_"], img[src*="/back.png"]', this).length > 0;
-                    }).remove();
+                    // Widget-Timer für Standardanzeigen aktivieren
+                    $('.widget-command-timer').addClass('timer');
+                    Timing.tickHandlers.timers.initTimers('widget-command-timer');
+                }
+                else {
+                    // Keine Befehle gefunden, aber UI (Countdown + Inputs + Toggle) bleibt bestehen
+                    UI.ErrorMessage('Keine Befehle gefunden');
+                }
 
-                $('.widget-command-timer').addClass('timer');
-                Timing.tickHandlers.timers.initTimers('widget-command-timer');
-$('#startArrivalSend').on('click', function() {
-    let year = new Date().getFullYear();
-    let day = parseInt($('#arrivalDay').val(), 10);
-    let month = parseInt($('#arrivalMonth').val(), 10);
-    let hour = parseInt($('#arrivalHour').val(), 10);
+                // 7) „Start Ankunfts-Senden“-Button binden
+                $('#startArrivalSend').off('click').on('click', function () {
+                    let heute = new Date();
+                    let day   = heute.getDate();
+                    let month = heute.getMonth() + 1;
+                    let year  = heute.getFullYear();
+
+                    let hour   = parseInt($('#arrivalHour').val(), 10);
+                    let minute = parseInt($('#arrivalMinute').val(), 10);
+                    let second = parseInt($('#arrivalSecond').val(), 10);
+
+                    if ([day, month, hour, minute, second].some(x => isNaN(x))) {
+                        alert('Bitte alle Felder ausfüllen!');
+                        return;
+                    }
+
+                    let arrivalTime = new Date(year, month - 1, day, hour, minute, second);
+                    let arrivalEpoch = Math.floor(arrivalTime.getTime() / 1000);
+
+                    // Dauer auslesen (0, wenn kein Command)
+                    let durationText = $commandTable
+                        .find('td:contains("Dauer:"),td:contains("Duur:"),td:contains("Duration:")')
+                        .next().text().trim();
+                    let [h2, m2, s2] = durationText.split(':').map(x => parseInt(x, 10) || 0);
+                    let durationInSeconds2 = h2 * 3600 + m2 * 60 + s2;
+
+                    let sendEpoch = arrivalEpoch - durationInSeconds2;
+                    if (sendEpoch < Math.floor(Date.now() / 1000)) {
+                        alert('Abschickzeit liegt in der Vergangenheit!');
+                        return;
+                    }
+                    scheduleSend(sendEpoch);
+                });
+            }
+        );
+    }
+}
+
+function manualUpdateCountdown() {
+    let heute = new Date();
+    let day   = heute.getDate();
+    let month = heute.getMonth() + 1;
+    let year  = heute.getFullYear();
+
+    let hour   = parseInt($('#arrivalHour').val(), 10);
     let minute = parseInt($('#arrivalMinute').val(), 10);
     let second = parseInt($('#arrivalSecond').val(), 10);
+    let dayVal   = parseInt($('#arrivalDay').val(), 10);
+    let monthVal = parseInt($('#arrivalMonth').val(), 10);
 
-    if (
-        isNaN(day) || isNaN(month) || isNaN(hour) ||
-        isNaN(minute) || isNaN(second)
-    ) {
-        alert('Bitte alle Felder ausfüllen!');
+    // Wenn Tag/Monat manuell geändert wurden, ignorieren wir heute – 
+    //    sonst setzen wir sie auf heute (falls leer)
+    if (isNaN(dayVal))   dayVal = day;
+    if (isNaN(monthVal)) monthVal = month;
+
+    if ([dayVal, monthVal, hour, minute, second].some(x => isNaN(x))) {
         return;
     }
 
-    // Jahr wie oben, falls du kein Jahr-Feld hast
-    let arrivalTime = new Date(year, month - 1, day, hour, minute, second);
-    let arrivalEpoch = Math.floor(arrivalTime.getTime() / 1000);
+    let arrivalEpoch = Math.floor(new Date(year, monthVal - 1, dayVal, hour, minute, second).getTime() / 1000);
 
-    // Dauer holen (wie bisher)
-    let durationText = $('form[action*="action=command"]').find('table')
-        .find('td:contains("Dauer:"),td:contains("Duur:"),td:contains("Duration:")').next().text().trim();
-    let [h, m, s] = durationText.split(':').map(e => parseInt(e, 10) || 0);
-    let durationInSeconds = h * 3600 + m * 60 + s;
+    let $commandTable = $('form[action*="action=command"]').find('table').first();
+    let durationText = $commandTable
+        .find('td:contains("Dauer:"),td:contains("Duur:"),td:contains("Duration:")')
+        .next().text().trim();
+    let [h, m, s] = durationText.split(':').map(x => parseInt(x, 10) || 0);
+    let durationSeconds = h * 3600 + m * 60 + s;
 
-    let sendEpoch = arrivalEpoch - durationInSeconds;
+    let sendEpoch = arrivalEpoch - durationSeconds;
 
-    if (sendEpoch < Math.floor(Date.now() / 1000)) {
-        alert('Abschickzeit liegt in der Vergangenheit!');
-        return;
-    }
+    stopAutoSendObserver();
+    $('#sendCountdown').remove();
 
-    scheduleSend(sendEpoch);
-});
+    $('.sendTime').html(
+        formatTimes(sendEpoch) +
+        ' (<span id="sendCountdown" class="sendTimer" data-endtime="' + sendEpoch + '">-</span>)'
+    );
 
+    Timing.tickHandlers.timers.initTimers('sendTimer');
 
-            } else {
-                UI.ErrorMessage('Keine Befehle gefunden');
-                clearTabCountdown();
-            }
-        });
+    if (autoSendEnabled) {
+        startAutoSendObserver();
     }
 }
+
 function scheduleSend(sendEpoch) {
     clearTabCountdown();
-    sendInterval = setInterval(function() {
-        let now = Math.floor(Date.now() / 1000);
-        let left = sendEpoch - now;
-        document.title = "⏰ Abschick in " + formatCountdown(left);
 
-        if (left <= 0) {
-            clearInterval(sendInterval);
-            sendInterval = null;
-            let $btn = $('#troop_confirm_submit');
-            if ($btn.length && $btn.is(':visible') && !$btn.prop('disabled')) {
-                $btn.click();
-                clearTabCountdown();
-            }
-        }
-    }, 200);
-}
-function clearTabCountdown() {
-    if (sendInterval !== null) {
-        clearInterval(sendInterval);
+    $('.sendTime').html(
+        formatTimes(sendEpoch) +
+        ' (<span id="sendCountdown" class="sendTimer" data-endtime="' + sendEpoch + '">-</span>)'
+    );
+
+    Timing.tickHandlers.timers.initTimers('sendTimer');
+
+    if (autoSendEnabled) {
+        startAutoSendObserver();
     }
-    sendInterval = null;
+}
+
+function clearTabCountdown() {
+    stopAutoSendObserver();
+    $('.sendTimer').remove();
+    $('.sendTime').html('-');
+    document.title = "Stämme";
+}
+
+function startAutoSendObserver() {
+    stopAutoSendObserver();
+    let countdownElem = document.getElementById('sendCountdown');
+    if (!countdownElem) return;
+
+    autoSendObserver = new MutationObserver(function () {
+        let text = countdownElem.textContent.trim();
+        if (autoSendEnabled && text === "0:00:00") {
+            stopAutoSendObserver();
+            setTimeout(function () {
+                let $btn = $('#troop_confirm_submit');
+                if ($btn.length && $btn.is(':visible') && !$btn.prop('disabled')) {
+                    $btn.click();
+                    clearTabCountdown();
+                }
+            }, 500);
+        }
+    });
+    autoSendObserver.observe(countdownElem, { childList: true, characterData: true, subtree: true });
+}
+
+function stopAutoSendObserver() {
     if (autoSendObserver) {
         autoSendObserver.disconnect();
         autoSendObserver = null;
     }
-    document.title = "Stämme";
 }
-
-
 
 function isVisible($el) {
     return $el.length > 0 && $el.is(':visible');
@@ -240,17 +311,14 @@ const observer = new MutationObserver(function () {
     if (isVisible($submit)) {
         initCommandUI();
     } else {
-        sendTimeInit = false; // Flag zurücksetzen, falls das Element wieder entfernt wird
-            clearTabCountdown();
-
-        
+        sendTimeInit = false;
+        clearTabCountdown();
     }
 });
 
-// Beobachte body dauerhaft
 observer.observe(document.body, { childList: true, subtree: true });
-// Direkt beim Laden prüfen
+
 if (isVisible($('#troop_confirm_submit'))) {
     initCommandUI();
-    console.log("Confirm Enhancer Startet");
+    console.log("Confirm Enhancer startet");
 }
