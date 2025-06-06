@@ -1,7 +1,5 @@
 const win = typeof unsafeWindow != 'undefined' ? unsafeWindow : window;
 
-console.log("Hey");
-
 // show UI and enable line mode
 win.TWLD_enableScriptHotkey = "l";
 // enable line mode
@@ -33,7 +31,8 @@ win.TWLD_continents = 16;
 
 // import data from website
 win.TWLD_data = [
- ["de240", "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/refs/heads/master/maps/korridore.js"],
+	//["de240", "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/refs/heads/master/maps/korridore.js"],
+	[]
 ];
 
 (function () {
@@ -85,8 +84,8 @@ win.TWLD_data = [
 	const data = win.TWLD_data || [
 		// [world, link]
 		// ["de197", "https://google.de"]
-		["de240", "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/refs/heads/master/maps/korridore.js"],
-		
+		//["de240", "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/refs/heads/master/maps/korridore.js"],
+		[]
 	];
 
 	// main object
