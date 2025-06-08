@@ -6,6 +6,7 @@
 // @author       SpeckMich
 // @connect      raw.githubusercontent.com
 // @match        https://*.die-staemme.de/game.php?*
+// @match        https://*ds-ultimate.de/tools/attackPlanner/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=die-staemme.de
 // @updateURL    https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/main.user.js
 // @downloadURL  https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/main.user.js
@@ -25,7 +26,8 @@
         market: {
             resource_balancer: "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/resBalancer.js",
             default: "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/menu/resBalancerMenuPoint.js"
-        }
+        },
+        attackPlannerEdit: "https://raw.githubusercontent.com/DeinRepo/DeinScript/master/modules/numberSaver.js"
     };
 
 
@@ -36,10 +38,20 @@
 
 
     window.loadModules = function() {
+        const url = new URL(location.href);
         const urlParams = new URL(location.href).searchParams;
+        const host = url.hostname;
+        const path = url.pathname;
         const screen = urlParams.get("screen") || '';
         const mode = urlParams.get("mode") || '';
         let moduleUrls = [];
+
+        if (
+            host.endsWith("ds-ultimate.de")
+            && /^\/tools\/attackPlanner\/\d+\/edit\/[A-Za-z0-9_-]+/.test(path)
+        ) {
+            moduleUrls.push(window.modules.attackPlannerEdit);
+        }
 
         let moduleUrl = null;
         switch (screen) {
