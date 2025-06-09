@@ -11,6 +11,12 @@
 // @updateURL    https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/main.user.js
 // @downloadURL  https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/main.user.js
 // @grant        GM_xmlhttpRequest
+// @grant        GM_xmlhttpRequest
+// @grant        GM.setValue
+// @grant        GM.getValue
+// @grant        GM.addValueChangeListener
+// @grant        GM_getValue
+// @grant        GM_setValue
 // @run-at       document-end
 // ==/UserScript==
 
@@ -78,21 +84,30 @@
 
         if (moduleUrls.length > 0) {
             moduleUrls.forEach(moduleUrl => {
-                console.log(moduleUrl);
                 GM_xmlhttpRequest({
-                    method: 'GET',
-                    url: cacheBust(moduleUrl),
-                    onload: function(response) {
-                        try {
-                            console.log(response)
-                            eval(response.responseText);
-                        } catch (e) {
-                            console.error('Fehler beim Laden des Moduls:', e);
-                        }
-                    },
-                    onerror: function(err) {
-                        console.error('Fehler beim Laden des Moduls:', err);
+                method: 'GET',
+                url: cacheBust(moduleUrl),
+                onload(response) {
+                    try {
+                    const code = response.responseText;
+                    // Injection der GM-APIs
+                    const fn = new Function(
+                        'GM', 'GM_setValue', 'GM_getValue', 'GM_addValueChangeListener',
+                        code
+                    );
+                    fn(
+                        GM,
+                        GM.setValue.bind(GM),
+                        GM.getValue.bind(GM),
+                        GM.addValueChangeListener.bind(GM)
+                    );
+                    } catch (e) {
+                    console.error('Fehler beim Laden des Moduls:', e);
                     }
+                },
+                onerror(err) {
+                    console.error('Fehler beim Laden des Moduls:', err);
+                }
                 });
             });
         }
