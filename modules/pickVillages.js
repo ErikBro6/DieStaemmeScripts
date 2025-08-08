@@ -88,7 +88,7 @@ win.activationCharCode = 'b';
  
         showUi: function() {
             // Haupt-Popup anlegen
-            var main_div = $('<div id="bb_main_div" class="popup_style" style="display:block; top:500px; right:100px; z-index:9999; position:fixed"></div>');
+            var main_div = $('<div id="bb_main_div" class="popup_style" style="display:block; top:100px; right:100px; z-index:9999; position:fixed"></div>');
             $('body').append(main_div);
             $(main_div).draggable();
 
