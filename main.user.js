@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SpeckMichs Die Stämme Tool Collection
 // @namespace    https://github.com/deinname/ds-tools
-// @version      1.9
+// @version      2.0
 // @description  Erweitert die Die Stämme Erfahrung mit einigen Tools und Skripten
 // @author       SpeckMich
 // @connect      raw.githubusercontent.com
@@ -27,7 +27,9 @@
         place: "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/babaFarmer.js",
         map: [
             "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/confirmEnhancer.js",
-            "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/lineMap.js"
+            "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/lineMap.js",
+            "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/tooltip.js",
+            "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/pickVillages.js",
         ],
         market: {
             resource_balancer: "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/resBalancer.js",
