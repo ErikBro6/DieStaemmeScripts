@@ -1,3 +1,4 @@
+console.log("Confirm Enhancer");
 let sendTimeInit = false;
 let autoSendEnabled = false;
 let autoSendObserver = null;
@@ -89,83 +90,90 @@ function initCommandUI() {
                 });
 
                 // 6) Wenn Commands vorhanden sind: Panel andocken + Klick-Handler
-                if ($cc.length > 0) {
-                    $commandTable
-                        .closest('table')
-                        .after($cc.find('table').parent().html() + '<br><div style="clear:both;"></div>')
-                        .next().css({
-                            'float': 'right',
-                            'width': w,
-                            'display': 'block',
-                            'max-height': $commandTable.height(),
-                            'overflow': 'scroll'
-                        })
-                        .find('tr.command-row')
-                        .on('click', function () {
-                            let $this = $(this);
+if ($cc.length > 0) {
+    console.log("Binding click to command-row (delegated)...");
 
-                            // a) Dauer auslesen
-                            let durationText = $commandTable
-                                .find('td:contains("Dauer:"),td:contains("Duur:"),td:contains("Duration:")')
-                                .next().text().trim();
-                            let [h, m, s] = durationText.split(':').map(x => parseInt(x, 10) || 0);
-                            let durationInSeconds = h * 3600 + m * 60 + s;
+    // Panel vorbereiten
+    const $commandPanel = $('<div id="command-panel"></div>').css({
+        'float': 'right',
+        'width': w,
+        'display': 'block',
+        'max-height': $commandTable.height(),
+        'overflow': 'scroll'
+    });
 
-                            // b) Endzeit aus <span class="timer">
-                            let endTime = parseInt($this.find('span.timer').data('endtime'), 10);
-                            if (isNaN(endTime) || durationInSeconds === 0) {
-                                $('.sendTime').html('Keine gültigen Zeitdaten');
-                                $('#sendCountdown')?.remove();
-                                clearTabCountdown();
-                                return;
-                            }
+    // Tabelle aus $cc einfügen
+    const $clonedTable = $cc.find('table').clone();
+    $commandPanel.append($clonedTable).append('<br><div style="clear:both;"></div>');
 
-                            // c) Ankunftszeit in Input-Felder schreiben (Tag/Monat bleiben auf heute gesetzt, 
-                            //    außer das Command gibt ein anderes Datum vor – dann überschreiben wir trotzdem)
-                            let arrivalDate = new Date(endTime * 1000);
-                            $('#arrivalDay').val(arrivalDate.getDate());
-                            $('#arrivalMonth').val(arrivalDate.getMonth() + 1);
-                            $('#arrivalHour').val(arrivalDate.getHours());
-                            $('#arrivalMinute').val(arrivalDate.getMinutes());
-                            $('#arrivalSecond').val(arrivalDate.getSeconds());
+    // Panel ins DOM einfügen
+    $commandTable.closest('table').after($commandPanel);
 
-                            // d) Sendepunkt berechnen
-                            let sendTime = endTime - durationInSeconds;
+    // Rückkehr-Befehle entfernen
+    $commandPanel.find('tr.command-row').filter(function () {
+        return $(this).find('img[src*="/return_"], img[src*="/back.png"]').length > 0;
+    }).remove();
 
-                            // e) Vorherige Timer/Observer stoppen
-                            clearTabCountdown();
+    // Delegierter Click-Handler
+    $commandPanel.on('click', 'tr.command-row', function () {
+        const $this = $(this);
 
-                            // f) Abschick Counter anzeigen (Datum/Uhrzeit + Countdown-Span)
-                            $('.sendTime').html(
-                                formatTimes(sendTime) +
-                                ' (<span id="sendCountdown" class="sendTimer" data-endtime="' + sendTime + '">-</span>)'
-                            );
+        // a) Dauer auslesen
+        let durationText = $commandTable
+            .find('td:contains("Dauer:"),td:contains("Duur:"),td:contains("Duration:")')
+            .next().text().trim();
+        let [h, m, s] = durationText.split(':').map(x => parseInt(x, 10) || 0);
+        let durationInSeconds = h * 3600 + m * 60 + s;
 
-                            // g) TribalWars internen Timer für <span class="sendTimer"> starten
-                            Timing.tickHandlers.timers.initTimers('sendTimer');
+        // b) Endzeit aus <span class="timer">
+        let endTime = parseInt($this.find('span.timer').data('endtime'), 10);
+        if (isNaN(endTime) || durationInSeconds === 0) {
+            $('.sendTime').html('Keine gültigen Zeitdaten');
+            $('#sendCountdown')?.remove();
+            clearTabCountdown();
+            return;
+        }
 
-                            // h) Auto-Send-Observer starten, falls aktiviert
-                            if (autoSendEnabled) {
-                                startAutoSendObserver();
-                            }
+        // c) Ankunftszeit in Input-Felder schreiben
+        let arrivalDate = new Date(endTime * 1000);
+        $('#arrivalDay').val(arrivalDate.getDate());
+        $('#arrivalMonth').val(arrivalDate.getMonth() + 1);
+        $('#arrivalHour').val(arrivalDate.getHours());
+        $('#arrivalMinute').val(arrivalDate.getMinutes());
+        $('#arrivalSecond').val(arrivalDate.getSeconds());
 
-                            // i) Betroffene Zeile hervorheben
-                            $this.closest('table').find('td').css('background-color', '');
-                            $this.find('td').css('background-color', '#FFF68F');
-                        })
-                        .filter(function () {
-                            // Zeilen mit Rückkehr-Icons entfernen
-                            return $(this).find('img[src*="/return_"], img[src*="/back.png"]').length > 0;
-                        }).remove();
+        // d) Sendepunkt berechnen
+        let sendTime = endTime - durationInSeconds;
 
-                    // Widget-Timer für Standardanzeigen aktivieren
-                    $('.widget-command-timer').addClass('timer');
-                    Timing.tickHandlers.timers.initTimers('widget-command-timer');
-                }
-                else {
-                    // Keine Befehle gefunden, aber UI (Countdown + Inputs + Toggle) bleibt bestehen
-                    UI.ErrorMessage('Keine Befehle gefunden');
-                }
+        // e) Vorherige Timer/Observer stoppen
+        clearTabCountdown();
+
+        // f) Abschick Counter anzeigen
+        $('.sendTime').html(
+            formatTimes(sendTime) +
+            ' (<span id="sendCountdown" class="sendTimer" data-endtime="' + sendTime + '">-</span>)'
+        );
+
+        // g) Timer starten
+        Timing.tickHandlers.timers.initTimers('sendTimer');
+
+        // h) Auto-Send-Observer starten
+        if (autoSendEnabled) {
+            startAutoSendObserver();
+        }
+
+        // i) Zeile hervorheben
+        $this.closest('table').find('td').css('background-color', '');
+        $this.find('td').css('background-color', '#FFF68F');
+    });
+
+    // Timer für Standardanzeigen aktivieren
+    $('.widget-command-timer').addClass('timer');
+    Timing.tickHandlers.timers.initTimers('widget-command-timer');
+} else {
+    UI.ErrorMessage('Keine Befehle gefunden');
+}
+
 
                 // 7) „Start Ankunfts-Senden“-Button binden
                 $('#startArrivalSend').off('click').on('click', function () {
@@ -318,7 +326,23 @@ const observer = new MutationObserver(function () {
 
 observer.observe(document.body, { childList: true, subtree: true });
 
-if (isVisible($('#troop_confirm_submit'))) {
-    initCommandUI();
-    console.log("Confirm Enhancer startet");
+
+function tryInitConfirmEnhancer(attempts = 0) {
+    const $submit = $('#troop_confirm_submit');
+    if (isVisible($submit)) {
+        initCommandUI();
+        console.log("Confirm Enhancer gestartet (Fallback)");
+        return;
+    }
+
+    if (attempts < 10) {
+        setTimeout(() => tryInitConfirmEnhancer(attempts + 1), 300);
+    } else {
+        console.warn("Confirm Enhancer konnte nicht initialisiert werden.");
+    }
 }
+
+document.addEventListener('DOMContentLoaded', () => {
+    tryInitConfirmEnhancer();
+});
+
