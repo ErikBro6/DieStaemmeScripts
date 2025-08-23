@@ -1,11 +1,11 @@
 (function () {
   'use strict';
-  const h2 = document.querySelector('#continent_id')?.closest('h2');
-  if (!h2) return;
+  const legend = document.querySelector('#map_legend');
+  if (!legend) return;
 
   const html = `
-    <div style="margin-top:6px">
-      <div style="position:relative; display:inline-block;">
+    <div style="margin-bottom:6px">
+      <div style="position:relative; display:inline-block; margin-right:8px;">
         <div style="
           background:#111; color:#fff; border-radius:8px; padding:10px 12px;
           box-shadow:0 8px 24px rgba(0,0,0,.2);
@@ -20,7 +20,8 @@
           position:absolute; top:-6px; left:16px; width:0; height:0;
           border-left:6px solid transparent; border-right:6px solid transparent; border-bottom:6px solid #111;"></div>
       </div>
-            <div style="position:relative; display:inline-block;">
+
+      <div style="position:relative; display:inline-block;">
         <div style="
           background:#111; color:#fff; border-radius:8px; padding:10px 12px;
           box-shadow:0 8px 24px rgba(0,0,0,.2);
@@ -38,5 +39,5 @@
     </div>
   `;
 
-  h2.insertAdjacentHTML('afterend', html);
+  legend.insertAdjacentHTML('beforebegin', html);
 })();
