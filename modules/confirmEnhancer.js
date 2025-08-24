@@ -57,6 +57,7 @@ function initCommandUI() {
                 $('#arrivalDay').val(jetzt.getDate());
                 $('#arrivalMonth').val(jetzt.getMonth() + 1);
 
+                pickupArrivalFromPlanner();
                 // 4) Auto-Senden-Button (falls nicht vorhanden)
                 if ($('#autoSendToggle').length === 0) {
                     $commandTable.find('tr').last().after(`
@@ -346,3 +347,66 @@ document.addEventListener('DOMContentLoaded', () => {
     tryInitConfirmEnhancer();
 });
 
+
+
+// --- NEU in confirmEnhancer.js ---
+async function pickupArrivalFromPlanner() {
+    try {
+        const p = await GM.getValue('pending_arrival', null);
+        if (!p) return;
+
+        // 10 Min. Gültigkeit
+        if (!p.createdAt || (Date.now() - p.createdAt) > 10 * 60 * 1000) {
+            await GM.setValue('pending_arrival', null);
+            return;
+        }
+
+        // Kontext grob prüfen (village reicht; target ist auf confirm oft nicht vorhanden)
+        const u = new URL(location.href);
+        const v = u.searchParams.get('village');
+        if (p.village && v && p.village !== v) {
+            return; // falscher Kontext
+        }
+
+        // Warte, bis deine Eingabefelder existieren (werden dynamisch erzeugt)
+        const ok = () =>
+            $('#arrivalDay').length &&
+            $('#arrivalMonth').length &&
+            $('#arrivalHour').length &&
+            $('#arrivalMinute').length &&
+            $('#arrivalSecond').length;
+
+        let retries = 0;
+        while (!ok() && retries < 100) { // bis zu ~10s
+            await new Promise(r => setTimeout(r, 100));
+            retries++;
+        }
+        if (!ok()) return;
+
+        // Werte setzen – bevorzugt die bereits geparsten Teile
+        let parts = p.arrivalParts;
+        if (!parts) {
+            const m = (p.arrivalStr || '').match(/^(\d{2})\.(\d{2})\.(\d{4}) (\d{2}):(\d{2}):(\d{2})/);
+            if (m) {
+                parts = { day:+m[1], month:+m[2], year:+m[3], hour:+m[4], minute:+m[5], second:+m[6] };
+            }
+        }
+        if (!parts) return;
+
+        $('#arrivalDay').val(parts.day);
+        $('#arrivalMonth').val(parts.month);
+        $('#arrivalHour').val(parts.hour);
+        $('#arrivalMinute').val(parts.minute);
+        $('#arrivalSecond').val(parts.second);
+
+        if (typeof manualUpdateCountdown === 'function') {
+            manualUpdateCountdown();
+        }
+
+        // Einmalverbrauch
+        await GM.setValue('pending_arrival', null);
+    } catch (e) {
+        // still – keine harten Abbrüche
+        console.warn('pickupArrivalFromPlanner error', e);
+    }
+}

@@ -35,7 +35,7 @@
             resource_balancer: "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/resBalancer.js",
             default: "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/menu/resBalancerMenuPoint.js"
         },
-        attackPlannerEdit: "https://raw.githubusercontent.com/DeinRepo/DeinScript/master/modules/numberSaver.js"
+        attackPlannerEdit: "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/dsUltimateTimingSaver.js"
     };
 
     function cacheBust(url) {
