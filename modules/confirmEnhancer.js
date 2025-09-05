@@ -1,7 +1,40 @@
 console.log("Confirm Enhancer");
 let sendTimeInit = false;
 let autoSendEnabled = false;
+ensureAutoParamVisible();
 let autoSendObserver = null;
+
+
+function isAutoFlow() {
+    const u = new URL(location.href);
+    const byParam   = u.searchParams.get('auto') === '1';
+    const bySession = sessionStorage.getItem('ds_auto_flow') === '1';
+    return byParam || bySession;
+}
+
+// optional: hält auto=1 sichtbar, falls die Seite es entfernt (kosmetisch)
+function ensureAutoParamVisible() {
+    if (!isAutoFlow()) return;
+    const u = new URL(location.href);
+    if (u.searchParams.get('auto') !== '1') {
+        u.searchParams.set('auto', '1');
+        history.replaceState(null, '', u);
+    }
+}
+
+// UI + Logik wirklich einschalten
+function enableAutoSendUI() {
+    autoSendEnabled = true;
+    const $btn = $('#autoSendToggle');
+    if ($btn.length) {
+        $btn.text('Auto-Senden: AN')
+            .css('background', '#4caf50')
+            .css('color', '#fff');
+    }
+    // Falls Countdown schon existiert, direkt beobachten
+    startAutoSendObserver();
+}
+
 
 function formatTimes(epoch) {
     function z(n) {
@@ -83,6 +116,10 @@ function initCommandUI() {
                                 stopAutoSendObserver();
                             }
                         });
+                }
+                // Auto einschalten, wenn wir aus dem Auto-Flow kommen
+                if (isAutoFlow()) {
+                    enableAutoSendUI();
                 }
 
                 // 5) Listener für Änderung der Ankunftszeit-Eingaben (aktualisiert Countdown)
@@ -171,6 +208,10 @@ if ($cc.length > 0) {
     // Timer für Standardanzeigen aktivieren
     $('.widget-command-timer').addClass('timer');
     Timing.tickHandlers.timers.initTimers('widget-command-timer');
+    if (isAutoFlow() && $('#autoSendToggle').length && !autoSendEnabled) {
+    enableAutoSendUI();
+}
+
 } else {
     UI.ErrorMessage('Keine Befehle gefunden');
 }
@@ -409,4 +450,6 @@ async function pickupArrivalFromPlanner() {
         // still – keine harten Abbrüche
         console.warn('pickupArrivalFromPlanner error', e);
     }
+
+
 }

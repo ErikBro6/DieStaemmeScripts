@@ -14,6 +14,7 @@
 // @grant        GM.setValue
 // @grant        GM.getValue
 // @grant        GM.addValueChangeListener
+// @grant        GM_openInTab
 // @run-at       document-end
 // ==/UserScript==
 
@@ -22,7 +23,8 @@
 
     window.modules = {
         place: [
-            "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/confirmEnhancer.js"
+            "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/confirmEnhancer.js",
+            "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/autoSender.js",
         ],
         map: [
             "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/confirmEnhancer.js",
@@ -35,7 +37,10 @@
             resource_balancer: "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/resBalancer.js",
             default: "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/menu/resBalancerMenuPoint.js"
         },
-        attackPlannerEdit: "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/dsUltimateTimingSaver.js"
+        attackPlannerEdit: [
+            "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/dsUltimateTimingSaver.js",
+            "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/dsUltimateAutoSender.js"
+        ]
     };
 
     function cacheBust(url) {
