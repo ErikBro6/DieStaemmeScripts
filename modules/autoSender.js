@@ -11,19 +11,6 @@
   const hasParam   = url.searchParams.get(PARAM_KEY) === PARAM_VAL;
   const cameByRef  = !!(document.referrer && /:\/\/(?:www\.)?ds-ultimate\.de\//i.test(document.referrer));
 
-  const isAutoFlow = sessionStorage.getItem('ds_auto_flow') === '1';
-
-  // Nur im Auto-Flow
-  if (hasParam || isAutoFlow) {
-    // Seite "try=confirm" = Rücksprung nach Abschicken
-    if (url.searchParams.get('try') === 'confirm') {
-      // Leichter Delay, damit Requests sicher rausgehen
-      setTimeout(() => {
-        window.close();
-      }, 3000);
-    }
-  }
-
   // Sticky-Flag aufräumen, falls wir organisch hier sind
   if (!(cameByRef || hasParam)) {
     sessionStorage.removeItem('ds_auto_flow');
