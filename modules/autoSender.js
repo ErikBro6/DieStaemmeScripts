@@ -99,19 +99,4 @@
   mo.observe(document.documentElement, { childList: true, subtree: true });
   setTimeout(() => mo.disconnect(), TIMEOUT_MS);
 
-    const u = new URL(location.href);
-
-  // Nur im Auto-Flow & auf der Confirm-Route
-  if (u.searchParams.get('screen') === 'place' &&
-      u.searchParams.get('try') === 'confirm' &&
-      u.searchParams.get('auto') === '1') {
-
-    const token   = u.searchParams.get('autotoken'); // vom Opener mitgegeben
-    const delayMs = 12000; // 3 Sekunden
-
-    if (token) {
-      // Signal an den Opener-Tab: schließ mich nach 3s
-      GM.setValue('auto_close_signal', { token, delayMs }).catch(() => {});
-    }
-  }
 })();
