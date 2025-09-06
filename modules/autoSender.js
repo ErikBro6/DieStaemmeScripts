@@ -107,7 +107,7 @@
       u.searchParams.get('auto') === '1') {
 
     const token   = u.searchParams.get('autotoken'); // vom Opener mitgegeben
-    const delayMs = 3000; // 3 Sekunden
+    const delayMs = 12000; // 3 Sekunden
 
     if (token) {
       // Signal an den Opener-Tab: schließ mich nach 3s
