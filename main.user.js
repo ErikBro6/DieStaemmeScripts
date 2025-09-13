@@ -5,6 +5,7 @@
 // @description  Erweitert die Die Stämme Erfahrung mit einigen Tools und Skripten
 // @author       SpeckMich
 // @connect      raw.githubusercontent.com
+// @connect      localhost
 // @match        https://*.die-staemme.de/game.php?*
 // @match        https://*ds-ultimate.de/tools/attackPlanner/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=die-staemme.de
@@ -15,6 +16,7 @@
 // @grant        GM.getValue
 // @grant        GM.addValueChangeListener
 // @grant        GM_openInTab
+// @grant        GM_registerMenuCommand
 // @run-at       document-end
 // ==/UserScript==
 
@@ -22,7 +24,7 @@
   "use strict";
 
   /** ---------------------------------------
-   *  Konfiguration
+   *  Basis-Konfiguration (Fallback)
    *  --------------------------------------*/
   const CONFIG = {
     cacheBustIntervalSec: 60,
@@ -53,10 +55,19 @@
   };
 
   /** ---------------------------------------
-   *  Utilities
+   *  Environments & Manifest
+   *  --------------------------------------*/
+  const ENV_KEY = "dsToolsEnv";
+  const DEFAULT_ENV = "prod";
+  const MANIFEST_URLS = {
+    prod: "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/manifest.prod.json",
+    dev:  "http://localhost:8123/manifest.dev.json",
+  };
+
+  /** ---------------------------------------
+   *  Utils / Logging
    *  --------------------------------------*/
   const LOG_NS = "[DS-Tools]";
-
   const log = {
     info: (...a) => console.info(LOG_NS, ...a),
     warn: (...a) => console.warn(LOG_NS, ...a),
@@ -64,13 +75,14 @@
   };
 
   const toArray = (v) => (Array.isArray(v) ? v : v ? [v] : []);
+  const isString = (v) => typeof v === "string";
 
   const cacheBust = (url) => {
     const nowMin = Math.floor(Date.now() / (CONFIG.cacheBustIntervalSec * 1000));
     return url + (url.includes("?") ? "&" : "?") + "_cb=" + nowMin;
   };
 
-  const isString = (v) => typeof v === "string";
+  function deepFreeze(o){Object.freeze(o);for (const k of Object.keys(o)){const v=o[k];if(v&&typeof v==="object"&&!Object.isFrozen(v))deepFreeze(v);}return o;}
 
   /** ---------------------------------------
    *  Kontext & Routing
@@ -79,63 +91,49 @@
     const url = new URL(location.href);
     const screen = url.searchParams.get("screen") || "";
     const mode = url.searchParams.get("mode") || "";
-    return {
-      url,
-      host: url.hostname,
-      path: url.pathname,
-      screen,
-      mode,
-    };
+    return { url, host: url.hostname, path: url.pathname, screen, mode };
   }
 
-  /**
-   * Routing-Regeln:
-   * - 1) Externe DS-Ultimate-Edit-URL
-   * - 2) Ingame per screen (+ Sonderfall market:mode)
-   */
   function resolveModuleUrls(ctx) {
-    // Regel 1: ds-ultimate attackPlanner Edit
+    const MODULES = window.modules || {};
     if (
       ctx.host.endsWith("ds-ultimate.de") &&
       /^\/tools\/attackPlanner\/\d+\/edit\/[A-Za-z0-9_-]+/.test(ctx.path)
     ) {
-      return toArray(CONFIG.modules.attackPlannerEdit);
+      return toArray(MODULES.attackPlannerEdit);
     }
-
-    // Regel 2: Ingame Routing anhand von "screen" (+ Sonderfall market)
-    if (ctx.screen === "market" && CONFIG.modules.market) {
-      const key = ctx.mode && CONFIG.modules.market[ctx.mode] ? ctx.mode : "default";
-      return toArray(CONFIG.modules.market[key]);
+    if (ctx.screen === "market" && MODULES.market) {
+      const key = ctx.mode && MODULES.market[ctx.mode] ? ctx.mode : "default";
+      return toArray(MODULES.market[key]);
     }
-
-    const direct = CONFIG.modules[ctx.screen];
-    return toArray(direct);
+    return toArray(MODULES[ctx.screen]);
   }
 
   /** ---------------------------------------
-   *  Loader
+   *  Loader (idempotent)
    *  --------------------------------------*/
   class ModuleLoader {
     constructor() {
-      this._concurrency = 4; // leicht drosseln, vermeidet Rate-/Netzprobleme
+      this._concurrency = 4;
       this._queue = [];
       this._active = 0;
+      this._loaded = new Set(); // idempotenz
     }
 
     loadAll(urls) {
+      // nur Strings & noch nicht geladene
+      urls = urls.filter(u => isString(u) && !this._loaded.has(u) && (this._loaded.add(u), true));
+
       return new Promise((resolve) => {
         if (!urls.length) {
-          log.info("Keine Module für diesen Kontext.");
+          log.info("Keine (neuen) Module für diesen Kontext.");
           return resolve();
         }
         let completed = 0;
         const total = urls.length;
 
         const next = () => {
-          if (!this._queue.length && this._active === 0) {
-            resolve();
-            return;
-          }
+          if (!this._queue.length && this._active === 0) return resolve();
           while (this._active < this._concurrency && this._queue.length) {
             const job = this._queue.shift();
             this._active++;
@@ -149,16 +147,7 @@
         };
 
         // Jobs anlegen
-        urls.forEach((u) => {
-          if (!isString(u)) {
-            this._queue.push(async () => {
-              log.warn("Unerwarteter Modultyp, ignoriert:", u);
-            });
-            return;
-          }
-          this._queue.push(() => this._fetchAndEval(u));
-        });
-
+        urls.forEach((u) => this._queue.push(() => this._fetchAndEval(u)));
         next();
       });
     }
@@ -175,8 +164,6 @@
           onload: (res) => {
             try {
               const code = res.responseText;
-              // eval für maximale Kompatibilität mit existierenden Modulen
-              // SourceURL hilft beim Debuggen im DevTools-Stacktrace
               // eslint-disable-next-line no-eval
               eval(code + "\n//# sourceURL=" + url);
             } catch (e) {
@@ -208,24 +195,85 @@
     }
   }
 
-  /** ---------------------------------------
-   *  Öffentliche API (minimiert)
-   *  --------------------------------------*/
   function loadModules() {
     const ctx = getContext();
     const moduleUrls = resolveModuleUrls(ctx);
     if (!moduleUrls.length) return;
-
     const loader = new ModuleLoader();
-    loader.loadAll(moduleUrls).then(() => {
-      // Intentionally no-op; Module sind evaluiert.
+    loader.loadAll(moduleUrls);
+  }
+
+  /** ---------------------------------------
+   *  Manifest & Bootstrap
+   *  --------------------------------------*/
+  async function getEnv() {
+    try {
+      const qp = new URL(location.href).searchParams;
+      const forced = qp.get("dstools_env");
+      if (forced) {
+        await GM.setValue(ENV_KEY, forced);
+        return forced;
+      }
+      return (await GM.getValue(ENV_KEY, DEFAULT_ENV)) || DEFAULT_ENV;
+    } catch {
+      return DEFAULT_ENV;
+    }
+  }
+
+  function registerEnvMenu(current) {
+    if (typeof GM_registerMenuCommand !== "function") return;
+    ["prod", "dev"].forEach(env => {
+      GM_registerMenuCommand(
+        `[DS-Tools] Environment: ${env}${env === current ? " ✓" : ""}`,
+        async () => { await GM.setValue(ENV_KEY, env); location.reload(); }
+      );
     });
   }
 
-  // Nur die minimal benötigte API exportieren
-  // (Kompatibel mit vorhandenem Aufrufmuster)
-  window.loadModules = loadModules;
+  function gmFetchJson(url) {
+    return new Promise((resolve, reject) => {
+      GM_xmlhttpRequest({
+        method: "GET", url, timeout: 15000,
+        onload: r => { try { resolve(JSON.parse(r.responseText)); } catch (e) { reject(e); } },
+        onerror: reject, ontimeout: () => reject(new Error("timeout"))
+      });
+    });
+  }
 
-  // Autostart am Dokumentende
-  loadModules();
+  function modulesFromManifest(manifest) {
+    if (manifest.modules) return manifest.modules;
+    if (manifest.baseUrl && manifest.routes) {
+      const base = manifest.baseUrl.replace(/\/$/, "");
+      const mapVal = v => Array.isArray(v) ? v.map(mapVal)
+        : (typeof v === "string"
+            ? (base + "/" + v.replace(/^\//, ""))
+            : (v && typeof v === "object"
+                ? Object.fromEntries(Object.entries(v).map(([k, val]) => [k, mapVal(val)]))
+                : v));
+      return mapVal(manifest.routes);
+    }
+    throw new Error("Ungültiges Manifest");
+  }
+
+  async function bootstrap() {
+    const env = await getEnv();
+    registerEnvMenu(env);
+
+    let modules = CONFIG.modules; // Fallback
+    try {
+      const manifestUrl = MANIFEST_URLS[env];
+      const manifest = await gmFetchJson(cacheBust(manifestUrl));
+      modules = modulesFromManifest(manifest);
+      log.info(`Manifest (${env}) geladen.`);
+    } catch (e) {
+      log.warn("Manifest laden fehlgeschlagen, nutze CONFIG.modules.", e);
+    }
+
+    window.modules = deepFreeze(modules);
+    window.loadModules = loadModules;
+    loadModules();
+  }
+
+  // Start
+  bootstrap();
 })();
