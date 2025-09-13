@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SpeckMichs Die Stämme Tool Collection
 // @namespace    https://github.com/deinname/ds-tools
-// @version      2.8.2
+// @version      2.8.3
 // @description  Erweitert die Die Stämme Erfahrung mit einigen Tools und Skripten
 // @author       SpeckMich
 // @connect      raw.githubusercontent.com
@@ -29,28 +29,29 @@
   const CONFIG = {
     cacheBustIntervalSec: 60,
     modules: {
-      place: [
-        "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/confirmEnhancer.js",
-        "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/autoSender.js",
+            "place": [
+        "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/<commit>/config/assetsBase.js",
+        "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/<commit>/ui/toggleButton.js",
+        "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/<commit>/modules/confirmEnhancer.js",
+        "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/<commit>/modules/autoSender.js"
       ],
-      map: [
-        "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/confirmEnhancer.js",
-        "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/lineMap.js",
-        "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/tooltip.js",
-        "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/pickVillages.js",
+      "map": [
+        "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/<commit>/config/assetsBase.js",
+        "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/<commit>/ui/toggleButton.js",
+        "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/<commit>/modules/confirmEnhancer.js",
+        "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/<commit>/modules/lineMap.js",
+        "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/<commit>/modules/tooltip.js",
+        "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/<commit>/modules/pickVillages.js"
       ],
-      overview_villages:
-        "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/overviewCombined.js",
-      market: {
-        resource_balancer:
-          "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/resBalancer.js",
-        default:
-          "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/menu/resBalancerMenuPoint.js",
+      "overview_villages": "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/<commit>/modules/overviewCombined.js",
+      "market": {
+        "resource_balancer": "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/<commit>/modules/resBalancer.js",
+        "default": "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/<commit>/menu/resBalancerMenuPoint.js"
       },
-      attackPlannerEdit: [
-        "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/dsUltimateTimingSaver.js",
-        "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/dsUltimateAutoSender.js",
-      ],
+      "attackPlannerEdit": [
+        "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/<commit>/modules/dsUltimateTimingSaver.js",
+        "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/<commit>/modules/dsUltimateAutoSender.js"
+      ]
     },
   };
 
@@ -224,7 +225,7 @@
     if (typeof GM_registerMenuCommand !== "function") return;
     ["prod", "dev"].forEach(env => {
       GM_registerMenuCommand(
-        `[DS-Tools] Environment: ${env}${env === current ? " ✓" : ""}`,
+        `[DS-Tool-Collection] Environment: ${env}${env === current ? " ✓" : ""}`,
         async () => { await GM.setValue(ENV_KEY, env); location.reload(); }
       );
     });

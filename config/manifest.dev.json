@@ -1,13 +1,28 @@
 {
   "baseUrl": "http://localhost:8123",
   "routes": {
-    "place": ["/modules/confirmEnhancer.js", "/modules/autoSender.js"],
-    "map": ["/modules/confirmEnhancer.js", "/modules/lineMap.js", "/modules/tooltip.js", "/modules/pickVillages.js"],
+    "place": [
+      "/config/assetsBase.js",
+      "/ui/toggleButton.js",
+      "/modules/confirmEnhancer.js",
+      "/modules/autoSender.js"
+    ],
+    "map": [
+      "/config/assetsBase.js",
+      "/ui/toggleButton.js",
+      "/modules/confirmEnhancer.js",
+      "/modules/lineMap.js",
+      "/modules/tooltip.js",
+      "/modules/pickVillages.js"
+    ],
     "overview_villages": "/modules/overviewCombined.js",
     "market": {
       "resource_balancer": "/modules/resBalancer.js",
       "default": "/menu/resBalancerMenuPoint.js"
     },
-    "attackPlannerEdit": ["/modules/dsUltimateTimingSaver.js", "/modules/dsUltimateAutoSender.js"]
+    "attackPlannerEdit": [
+      "/modules/dsUltimateTimingSaver.js",
+      "/modules/dsUltimateAutoSender.js"
+    ]
   }
 }
