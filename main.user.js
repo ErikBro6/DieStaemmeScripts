@@ -60,8 +60,8 @@
   const ENV_KEY = "dsToolsEnv";
   const DEFAULT_ENV = "prod";
   const MANIFEST_URLS = {
-    prod: "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/manifest.prod.json",
-    dev:  "http://localhost:8123/manifest.dev.json",
+    prod: "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/config/manifest.prod.json",
+    dev:  "http://localhost:8123/config/manifest.dev.json",
   };
 
   /** ---------------------------------------
