@@ -1,0 +1,47 @@
+.ds-dp {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  flex-wrap: wrap;
+  font: 500 13px/1.1 system-ui,-apple-system,Segoe UI,Inter,Roboto,Arial,sans-serif;
+}
+
+.ds-dp label {
+  color: #374151;
+  margin-right: .25rem;
+}
+
+.ds-dp input[type="date"],
+.ds-dp input[type="time"] {
+  height: 30px;
+  padding: 0 .5rem;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #111827;
+  outline: none;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+.ds-dp input[type="date"]:focus,
+.ds-dp input[type="time"]:focus {
+  border-color: #10b981;
+  box-shadow: 0 0 0 3px rgba(16,185,129,.25);
+}
+
+.ds-dp .apply {
+  height: 30px;
+  padding: 0 .6rem;
+  border-radius: 8px;
+  border: 0;
+  background: #059669;
+  color: #ecfdf5;
+  cursor: pointer;
+  font-weight: 600;
+  transition: filter .15s ease, transform .04s ease;
+}
+.ds-dp .apply:hover { filter: brightness(1.05); }
+.ds-dp .apply:active { transform: translateY(1px); }
+
+/* kleine Hilfen */
+.ds-dp .hint { color: #6b7280; font-size: 12px; }

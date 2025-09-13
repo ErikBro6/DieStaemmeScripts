@@ -4,12 +4,14 @@
     "place": [
       "/config/assetsBase.js",
       "/ui/toggleButton.js",
+      "/ui/datePicker.js",
       "/modules/confirmEnhancer.js",
       "/modules/autoSender.js"
     ],
     "map": [
       "/config/assetsBase.js",
       "/ui/toggleButton.js",
+      "/ui/datePicker.js",
       "/modules/confirmEnhancer.js",
       "/modules/lineMap.js",
       "/modules/tooltip.js",

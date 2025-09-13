@@ -1,371 +1,482 @@
+console.log("Confirm Enhancer");
 
+// --- UI Assets (extern) ---
+const UI_BASE = (window.DS_ASSETS_BASE || "").replace(/\/$/, "") + "/ui";
+const TOGGLE_CSS  = UI_BASE + "/toggleButton.css";
+const TOGGLE_HTML = UI_BASE + "/toggleButton.html";
 
-(function confirmEnhancerIIFE(){
-  if (window.__CONFIRM_ENHANCER_LOADED__) return; // idempotent bei Doppel-Eval
-  window.__CONFIRM_ENHANCER_LOADED__ = true;
-
-    const UI_BASE = (window.DS_ASSETS_BASE || "").replace(/\/$/, "") + "/ui";
-    const TOGGLE_CSS  = UI_BASE + "/toggleButton.css";
-    const TOGGLE_HTML = UI_BASE + "/toggleButton.html";
-
-  // ---- State
-  let sendTimeInit = false;
-  let autoSendEnabled = false;
-  let autoSendObserver = null;
-  let rootObserver = null;
-
-  // ---- Utils
-  const $ = window.$;
-  const log = (...a) => console.info("[confirmEnhancer]", ...a);
-
-  const q = (sel, ctx=document) => ctx.querySelector(sel);
-  const qa = (sel, ctx=document) => Array.from(ctx.querySelectorAll(sel));
-
-  const nowEpoch = () => Math.floor(Date.now() / 1000);
-
-  const parseDuration = (text) => {
-    // Sucht “hh:mm:ss” in beliebigen Label-Varianten (Dauer/Duur/Duration)
-    const m = (text || "").match(/(\d{1,2}):(\d{2}):(\d{2})/);
-    if (!m) return 0;
-    const [h,mn,s] = [parseInt(m[1],10)||0, parseInt(m[2],10)||0, parseInt(m[3],10)||0];
-    return h*3600 + mn*60 + s;
-  };
-
-  const fmt2 = (n) => (n<10? "0":"") + n;
-  const formatEpoch = (epoch) => {
-    const d = new Date(epoch*1000);
-    return `${fmt2(d.getDate())}.${fmt2(d.getMonth()+1)} ${fmt2(d.getHours())}:${fmt2(d.getMinutes())}:${fmt2(d.getSeconds())}`;
-  };
-
-  const isVisible = ($el) => $el.length > 0 && $el.is(":visible");
-
-  const isAutoFlow = () => {
-    const u = new URL(location.href);
-    return u.searchParams.get("auto")==="1" || sessionStorage.getItem("ds_auto_flow")==="1";
-  };
-
-  const ensureAutoParamVisible = () => {
-    if (!isAutoFlow()) return;
-    const u = new URL(location.href);
-    if (u.searchParams.get("auto") !== "1") {
-      u.searchParams.set("auto", "1");
-      history.replaceState(null, "", u);
-    }
-  };
-
-  // ---- DOM pieces (einmal gecacht)
-  const dom = {
-    get commandTable() { return $('form[action*="action=command"]').find('table').first(); },
-    get submitBtn() { return $('#troop_confirm_submit'); },
-    get ccHtml() { return $('.village_anchor').first().find('a').first().attr('href'); },
-    get countdownEl() { return document.getElementById('sendCountdown'); },
-    get durationCellText() {
-      return this.commandTable
-        .find('td:contains("Dauer:"),td:contains("Duur:"),td:contains("Duration:")')
-        .next().text().trim();
-    },
-    ensureInputsExist() {
-      const $ct = this.commandTable;
-      if ($ct.length===0) return false;
-      if ($('.sendTime').length===0) {
-        $ct.css('float','left')
-          .find('tr').last()
-          .after('<tr><td>Abschick Counter:</td><td class="sendTime">-</td></tr>');
-      }
-      if (!$('#arrivalDay').length) {
-        $ct.find('tr').last().after(`
-          <tr>
-            <td style="white-space:nowrap;">Ankunftszeit:</td>
-            <td style="white-space:nowrap;">
-              <input type="number" id="arrivalDay" min="1" max="31" placeholder="TT" style="width:40px;"> .
-              <input type="number" id="arrivalMonth" min="1" max="12" placeholder="MM" style="width:40px;">&nbsp;
-              <input type="number" id="arrivalHour" min="0" max="23" placeholder="HH" style="width:40px;"> :
-              <input type="number" id="arrivalMinute" min="0" max="59" placeholder="MM" style="width:40px;"> :
-              <input type="number" id="arrivalSecond" min="0" max="59" placeholder="SS" style="width:40px;">
-            </td>
-          </tr>
-        `);
-        const now = new Date();
-        $('#arrivalDay').val(now.getDate());
-        $('#arrivalMonth').val(now.getMonth()+1);
-
-        // Change-Listener einmalig
-        $('#arrivalDay, #arrivalMonth, #arrivalHour, #arrivalMinute, #arrivalSecond')
-          .off('change.confirmEnhancer')
-          .on('change.confirmEnhancer', manualUpdateCountdown);
-      }
-        if (!$('#autoSendToggle').length) {
-        // neue Tabellenzeile einfügen mit leerer Zelle
-        const $row = $('<tr>');
-        $row.append('<td style="white-space:nowrap;">&nbsp;</td>');
-        const $cell = $('<td>');
-        $row.append($cell);
-        $commandTable.find('tr').last().after($row);
-
-        // Button via UI_LIB erstellen und einfügen
-        UI_LIB.createToggleButton({
-            id: "autoSendToggle",
-            initial: autoSendEnabled,
-            onLabel: "Auto-Senden",
-            offLabel: "Auto-Senden",
-            onState: "AN",
-            offState: "AUS",
-            cssUrl: TOGGLE_CSS,
-            htmlUrl: TOGGLE_HTML,
-            onChange: (state) => {
-            autoSendEnabled = state;
-            if (state) startAutoSendObserver();
-            else stopAutoSendObserver();
-            }
-        }).then(btn => {
-            $cell[0].appendChild(btn);
-        }).catch(e => console.warn("toggle button failed", e));
-        }
-
-      return true;
-    },
-    setSendCountdown(epoch) {
-      $('.sendTime').html(
-        `${formatEpoch(epoch)} (<span id="sendCountdown" class="sendTimer" data-endtime="${epoch}">-</span>)`
-      );
-      Timing.tickHandlers.timers.initTimers('sendTimer');
-    },
-    clearCountdown() {
-      stopAutoSendObserver();
-      $('.sendTimer').remove();
-      $('.sendTime').html('-');
-      document.title = "Stämme";
-    },
-    setArrivalInputs(parts){ // {day,month,hour,minute,second}
-      if (parts.day)   $('#arrivalDay').val(parts.day);
-      if (parts.month) $('#arrivalMonth').val(parts.month);
-      if (parts.hour!=null)   $('#arrivalHour').val(parts.hour);
-      if (parts.minute!=null) $('#arrivalMinute').val(parts.minute);
-      if (parts.second!=null) $('#arrivalSecond').val(parts.second);
-    }
-  };
-
-  // ---- Core Handlers
-  function manualUpdateCountdown() {
-    const now = new Date();
-    const year = now.getFullYear();
-
-    const day   = parseInt($('#arrivalDay').val(), 10)    || now.getDate();
-    const month = parseInt($('#arrivalMonth').val(), 10)  || (now.getMonth()+1);
-    const hour  = parseInt($('#arrivalHour').val(), 10);
-    const min   = parseInt($('#arrivalMinute').val(), 10);
-    const sec   = parseInt($('#arrivalSecond').val(), 10);
-    if ([day,month,hour,min,sec].some(n => Number.isNaN(n))) return;
-
-    const arrivalEpoch = Math.floor(new Date(year, month-1, day, hour, min, sec).getTime()/1000);
-    const dur = parseDuration(dom.durationCellText);
-    const sendEpoch = arrivalEpoch - dur;
-
-    stopAutoSendObserver();
-    $('#sendCountdown').remove();
-    dom.setSendCountdown(sendEpoch);
-    if (autoSendEnabled) startAutoSendObserver();
+// --- kleine Wait-Helper ---
+const delay = (ms) => new Promise(r => setTimeout(r, ms));
+async function waitFor(predicate, { timeout=3000, interval=50 } = {}) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < timeout) {
+    try { if (predicate()) return true; } catch {}
+    await delay(interval);
   }
+  return false;
+}
+const waitForUiLib = (ms=3000) =>
+  waitFor(() => window.UI_LIB && typeof UI_LIB.createToggleButton === "function",
+          { timeout: ms, interval: 50 });
 
-  function startAutoSendObserver() {
-    stopAutoSendObserver();
-    const el = dom.countdownEl;
-    if (!el) return;
+// --- State ---
+let sendTimeInit = false;
+let autoSendEnabled = false;
+ensureAutoParamVisible();
+let autoSendObserver = null;
 
-    autoSendObserver = new MutationObserver(() => {
-      const text = el.textContent.trim();
-      if (autoSendEnabled && text === "0:00:00") {
-        stopAutoSendObserver();
-        // leichte Jitter-Zeit
-        const jitter = 400 + Math.floor(Math.random()*200);
-        setTimeout(() => {
-          const $btn = dom.submitBtn;
-          if ($btn.length && $btn.is(':visible') && !$btn.prop('disabled')) {
-            $btn.click();
-            dom.clearCountdown();
-          }
-        }, jitter);
-      }
-    });
-    autoSendObserver.observe(el, { childList: true, characterData: true, subtree: true });
+function isAutoFlow() {
+  const u = new URL(location.href);
+  const byParam   = u.searchParams.get('auto') === '1';
+  const bySession = sessionStorage.getItem('ds_auto_flow') === '1';
+  return byParam || bySession;
+}
+
+// optional: hält auto=1 sichtbar, falls die Seite es entfernt (kosmetisch)
+function ensureAutoParamVisible() {
+  if (!isAutoFlow()) return;
+  const u = new URL(location.href);
+  if (u.searchParams.get('auto') !== '1') {
+    u.searchParams.set('auto', '1');
+    history.replaceState(null, '', u);
   }
+}
 
-  function stopAutoSendObserver() {
-    if (autoSendObserver) { autoSendObserver.disconnect(); autoSendObserver = null; }
-  }
-
-  function bindCommandPanelIfAvailable(targetHtml, $commandTable) {
-    if (!targetHtml) { UI?.ErrorMessage?.('Keine Befehle gefunden'); return; }
-    const $tmp = $(targetHtml);
-    const $cc  = $tmp.find('.commands-container');
-    if (!$cc.length) { UI?.ErrorMessage?.('Keine Befehle gefunden'); return; }
-
-    const w = (game_data.screen === 'map')
-      ? '100%' : ($('#content_value').width() - $commandTable.width() - 10) + 'px';
-
-    const $panel = $('<div id="command-panel"></div>').css({
-      float: 'right', width: w, display: 'block',
-      'max-height': $commandTable.height(), overflow: 'auto'
-    });
-
-    const $table = $cc.find('table').clone();
-    // Rückkehr-Befehle entfernen
-    $table.find('tr.command-row').filter(function () {
-      return $(this).find('img[src*="/return_"], img[src*="/back.png"]').length > 0;
-    }).remove();
-
-    $panel.append($table).append('<br><div style="clear:both;"></div>');
-    $commandTable.closest('table').after($panel);
-
-    // Delegierter Click
-    $panel.on('click.confirmEnhancer', 'tr.command-row', function () {
-      const $row = $(this);
-
-      const dur = parseDuration(dom.durationCellText);
-      const endTime = parseInt($row.find('span.timer').data('endtime'), 10);
-      if (!endTime || !dur) {
-        $('.sendTime').html('Keine gültigen Zeitdaten');
-        $('#sendCountdown')?.remove();
-        dom.clearCountdown();
-        return;
-      }
-
-      const arrival = new Date(endTime*1000);
-      dom.setArrivalInputs({
-        day: arrival.getDate(),
-        month: arrival.getMonth()+1,
-        hour: arrival.getHours(),
-        minute: arrival.getMinutes(),
-        second: arrival.getSeconds()
-      });
-
-      const sendEpoch = endTime - dur;
-      dom.clearCountdown();
-      dom.setSendCountdown(sendEpoch);
-      if (autoSendEnabled) startAutoSendObserver();
-
-      $row.closest('table').find('td').css('background-color','');
-      $row.find('td').css('background-color','#FFF68F');
-    });
-
-    // Timer-Klassen normalisieren
-    $('.widget-command-timer').addClass('timer');
-    Timing.tickHandlers.timers.initTimers('widget-command-timer');
-  }
-
-  async function pickupArrivalFromPlanner() {
-    try {
-      const p = await GM.getValue('pending_arrival', null);
-      if (!p) return;
-      if (!p.createdAt || (Date.now() - p.createdAt) > 10*60*1000) {
-        await GM.setValue('pending_arrival', null);
-        return;
-      }
-      const u = new URL(location.href);
-      const v = u.searchParams.get('village');
-      if (p.village && v && p.village !== v) return;
-
-      // warten bis inputs existieren
-      let tries=0;
-      const ok = () => $('#arrivalDay,#arrivalMonth,#arrivalHour,#arrivalMinute,#arrivalSecond').length===5;
-      while(!ok() && tries<100){ await new Promise(r=>setTimeout(r,100)); tries++; }
-      if(!ok()) return;
-
-      let parts = p.arrivalParts;
-      if (!parts) {
-        const m = (p.arrivalStr || '').match(/^(\d{2})\.(\d{2})\.(\d{4}) (\d{2}):(\d{2}):(\d{2})/);
-        if (m) parts = { day:+m[1], month:+m[2], year:+m[3], hour:+m[4], minute:+m[5], second:+m[6] };
-      }
-      if (!parts) return;
-
-      dom.setArrivalInputs(parts);
-      manualUpdateCountdown();
-
-      await GM.setValue('pending_arrival', null); // consume once
-    } catch(e){ console.warn('pickupArrivalFromPlanner error', e); }
-  }
-
-  function scheduleSend(sendEpoch) {
-    dom.clearCountdown();
-    dom.setSendCountdown(sendEpoch);
-    if (autoSendEnabled) startAutoSendObserver();
-  }
-
-  function initCommandUI() {
-    if (!(game_data.screen === 'map' || game_data.screen === 'place')) return;
-    if (!$('#place_confirm_units').length) return;
-
-    if (!dom.ensureInputsExist()) return;
-    if (!sendTimeInit) {
-      sendTimeInit = true;
-      ensureAutoParamVisible();
-      pickupArrivalFromPlanner();
-
-      // „Auto aus URL/Session“ -> sofort aktivieren
-if (isAutoFlow()) {
+// UI + Logik wirklich einschalten
+function enableAutoSendUI() {
   autoSendEnabled = true;
-  document.getElementById("autoSendToggle")?.setState(true);
+  const btn = document.getElementById('autoSendToggle');
+  if (btn && typeof btn.setState === 'function') {
+    btn.setState(true); // neuer Toggle-Button
+  } else {
+    // Fallback für ganz alten Button (sollte nicht mehr nötig sein)
+    const $btn = $('#autoSendToggle');
+    if ($btn.length) {
+      $btn.text('Auto-Senden: AN').css('background', '#4caf50').css('color', '#fff');
+    }
+  }
+  // Falls Countdown schon existiert, direkt beobachten
   startAutoSendObserver();
 }
 
+function formatTimes(epoch) {
+  function z(n) { let s = "" + n; while (s.length < 2) s = "0" + s; return s; }
+  let d = new Date(epoch * 1000);
+  return z(d.getDate()) + "." + z(d.getMonth() + 1) +
+         " " + z(d.getHours()) + ":" + z(d.getMinutes()) + ":" + z(d.getSeconds());
+}
 
-      // Button „Start Ankunfts-Senden“
-      $('#startArrivalSend').off('click.confirmEnhancer').on('click.confirmEnhancer', () => {
-        const now = new Date(), year = now.getFullYear();
-        const day   = parseInt($('#arrivalDay').val(), 10);
-        const month = parseInt($('#arrivalMonth').val(), 10);
-        const hour  = parseInt($('#arrivalHour').val(), 10);
-        const min   = parseInt($('#arrivalMinute').val(), 10);
-        const sec   = parseInt($('#arrivalSecond').val(), 10);
-        if ([day,month,hour,min,sec].some(isNaN)) { alert('Bitte alle Felder ausfüllen!'); return; }
+function initCommandUI() {
+  if (
+    (game_data.screen === 'map' || game_data.screen === 'place') &&
+    $('#place_confirm_units').length > 0 &&
+    $('.sendTime').length === 0 &&
+    !sendTimeInit
+  ) {
+    sendTimeInit = true;
 
-        const arrivalEpoch = Math.floor(new Date(year,month-1,day,hour,min,sec).getTime()/1000);
-        const dur = parseDuration(dom.durationCellText);
-        const sendEpoch = arrivalEpoch - dur;
-        if (sendEpoch < nowEpoch()) { alert('Abschickzeit liegt in der Vergangenheit!'); return; }
-        scheduleSend(sendEpoch);
-      });
+    $.get(
+      $('.village_anchor').first().find('a').first().attr('href'),
+      function (html) {
+        let $cc = $(html).find('.commands-container');
+        let $commandTable = $('form[action*="action=command"]').find('table').first();
+        let w = (game_data.screen === 'map')
+          ? '100%'
+          : ($('#content_value').width() - $commandTable.width() - 10) + 'px';
 
-      // Commands-Panel async laden (ein Request)
-      const href = dom.ccHtml;
-      if (href) {
-        $.get(href, (html) => {
-          bindCommandPanelIfAvailable(html, dom.commandTable);
+        // 1) „Abschick Counter“-Zelle einfügen
+        $commandTable
+          .css('float', 'left')
+          .find('tr').last()
+          .after('<tr><td>Abschick Counter:</td><td class="sendTime">-</td></tr>');
+
+        // 3) Ankunftszeit-Eingaben
+        $commandTable.find('tr').last().after(`
+          <tr>
+            <td style="white-space: nowrap;">Ankunftszeit:</td>
+            <td style="white-space: nowrap;">
+              <input type="number" id="arrivalDay"   min="1" max="31" placeholder="TT" style="width:40px;"> .
+              <input type="number" id="arrivalMonth" min="1" max="12" placeholder="MM" style="width:40px;">&nbsp;
+              <input type="number" id="arrivalHour"  min="0" max="23" placeholder="HH" style="width:40px;"> :
+              <input type="number" id="arrivalMinute"min="0" max="59" placeholder="MM" style="width:40px;"> :
+              <input type="number" id="arrivalSecond"min="0" max="59" placeholder="SS" style="width:40px;">
+            </td>
+          </tr>
+        `);
+
+        // 3a) Felder für Tag/Monat sofort mit heutigem Datum befüllen
+        let jetzt = new Date();
+        $('#arrivalDay').val(jetzt.getDate());
+        $('#arrivalMonth').val(jetzt.getMonth() + 1);
+
+        pickupArrivalFromPlanner();
+
+        // direkt NACH dem Block, der die arrival*-Inputs einfügt
+        $commandTable.find('tr').last().after(`
+        <tr>
+            <td style="white-space: nowrap;">Datum & Uhrzeit:</td>
+            <td><div id="ds-date-picker"></div></td>
+        </tr>
+        `);
+
+        // Date+Time Picker mounten (ruft beim Übernehmen deine Countdown-Logik)
+        if (window.DATEPICKER && typeof DATEPICKER.mount === "function") {
+        DATEPICKER.mount({
+            container: "#ds-date-picker",
+            onApply: () => {
+            if (typeof manualUpdateCountdown === "function") manualUpdateCountdown();
+            }
+        });
+        }
+
+
+        // 4) Auto-Senden-Button (NEU: ausgelagerte UI-Komponente)
+        if ($('#autoSendToggle').length === 0) {
+          const $row = $('<tr>');
+          $row.append('<td style="white-space: nowrap;">&nbsp;</td>');
+          const $cell = $('<td>');
+          $row.append($cell);
+          $commandTable.find('tr').last().after($row);
+
+          // Warten auf die UI-Lib (falls parallel geladen)
+          waitForUiLib(3000).then(async ok => {
+            if (!ok) {
+              console.warn('UI_LIB nicht verfügbar – versuche später erneut');
+              setTimeout(() => { if (!$('#autoSendToggle').length) initCommandUI(); }, 200);
+              return;
+            }
+            try {
+              const btn = await UI_LIB.createToggleButton({
+                id: "autoSendToggle",
+                initial: autoSendEnabled,
+                onLabel: "Auto-Senden",
+                offLabel: "Auto-Senden",
+                onState: "AN",
+                offState: "AUS",
+                cssUrl: TOGGLE_CSS,
+                htmlUrl: TOGGLE_HTML,
+                onChange: (state) => {
+                  autoSendEnabled = state;
+                  if (state) startAutoSendObserver(); else stopAutoSendObserver();
+                }
+              });
+              $cell[0].appendChild(btn);
+              // Auto einschalten, wenn wir aus dem Auto-Flow kommen
+              if (isAutoFlow() && !autoSendEnabled) enableAutoSendUI();
+            } catch (e) {
+              console.warn("toggle button failed", e);
+              setTimeout(() => { if (!$('#autoSendToggle').length) initCommandUI(); }, 300);
+            }
+          });
+        } else {
+          // Falls Button schon da & Auto-Flow aktiv -> einschalten
+          if (isAutoFlow() && !autoSendEnabled) enableAutoSendUI();
+        }
+
+        // 5) Listener Ankunftszeit -> Countdown aktualisieren
+        $('#arrivalDay, #arrivalMonth, #arrivalHour, #arrivalMinute, #arrivalSecond').on('change', function() {
+          manualUpdateCountdown();
+        });
+
+        // 6) Commands-Panel andocken
+        if ($cc.length > 0) {
+          console.log("Binding click to command-row (delegated)...");
+
+          const $commandPanel = $('<div id="command-panel"></div>').css({
+            'float': 'right',
+            'width': w,
+            'display': 'block',
+            'max-height': $commandTable.height(),
+            'overflow': 'scroll'
+          });
+
+          const $clonedTable = $cc.find('table').clone();
+          $commandPanel.append($clonedTable).append('<br><div style="clear:both;"></div>');
+
+          $commandTable.closest('table').after($commandPanel);
+
+          // Rückkehr-Befehle entfernen
+          $commandPanel.find('tr.command-row').filter(function () {
+            return $(this).find('img[src*="/return_"], img[src*="/back.png"]').length > 0;
+          }).remove();
+
+          // Delegierter Click-Handler
+          $commandPanel.on('click', 'tr.command-row', function () {
+            const $this = $(this);
+
+            // a) Dauer auslesen
+            let durationText = $commandTable
+              .find('td:contains("Dauer:"),td:contains("Duur:"),td:contains("Duration:")')
+              .next().text().trim();
+            let [h, m, s] = durationText.split(':').map(x => parseInt(x, 10) || 0);
+            let durationInSeconds = h * 3600 + m * 60 + s;
+
+            // b) Endzeit aus <span class="timer">
+            let endTime = parseInt($this.find('span.timer').data('endtime'), 10);
+            if (isNaN(endTime) || durationInSeconds === 0) {
+              $('.sendTime').html('Keine gültigen Zeitdaten');
+              $('#sendCountdown')?.remove();
+              clearTabCountdown();
+              return;
+            }
+
+            // c) Ankunftszeit in Input-Felder schreiben
+            let arrivalDate = new Date(endTime * 1000);
+            $('#arrivalDay').val(arrivalDate.getDate());
+            $('#arrivalMonth').val(arrivalDate.getMonth() + 1);
+            $('#arrivalHour').val(arrivalDate.getHours());
+            $('#arrivalMinute').val(arrivalDate.getMinutes());
+            $('#arrivalSecond').val(arrivalDate.getSeconds());
+
+            // d) Sendepunkt berechnen
+            let sendTime = endTime - durationInSeconds;
+
+            // e) Vorherige Timer/Observer stoppen
+            clearTabCountdown();
+
+            // f) Abschick Counter anzeigen
+            $('.sendTime').html(
+              formatTimes(sendTime) +
+              ' (<span id="sendCountdown" class="sendTimer" data-endtime="' + sendTime + '">-</span>)'
+            );
+
+            // g) Timer starten
+            Timing.tickHandlers.timers.initTimers('sendTimer');
+
+            // h) Auto-Send-Observer starten
+            if (autoSendEnabled) {
+              startAutoSendObserver();
+            }
+
+            // i) Zeile hervorheben
+            $(this).closest('table').find('td').css('background-color', '');
+            $(this).find('td').css('background-color', '#FFF68F');
+          });
+
+          // Timer für Standardanzeigen aktivieren
+          $('.widget-command-timer').addClass('timer');
+          Timing.tickHandlers.timers.initTimers('widget-command-timer');
+
+          // Safety: falls Auto-Flow und Button gerade nachgeladen wurde
+          if (isAutoFlow() && $('#autoSendToggle').length && !autoSendEnabled) {
+            enableAutoSendUI();
+          }
+        } else {
+          UI.ErrorMessage('Keine Befehle gefunden');
+        }
+
+        // 7) „Start Ankunfts-Senden“-Button binden
+        $('#startArrivalSend').off('click').on('click', function () {
+          let heute = new Date();
+          let day   = heute.getDate();
+          let month = heute.getMonth() + 1;
+          let year  = heute.getFullYear();
+
+          let hour   = parseInt($('#arrivalHour').val(), 10);
+          let minute = parseInt($('#arrivalMinute').val(), 10);
+          let second = parseInt($('#arrivalSecond').val(), 10);
+
+          if ([day, month, hour, minute, second].some(x => isNaN(x))) {
+            alert('Bitte alle Felder ausfüllen!');
+            return;
+          }
+
+          let arrivalTime = new Date(year, month - 1, day, hour, minute, second);
+          let arrivalEpoch = Math.floor(arrivalTime.getTime() / 1000);
+
+          // Dauer auslesen (0, wenn kein Command)
+          let durationText = $commandTable
+            .find('td:contains("Dauer:"),td:contains("Duur:"),td:contains("Duration:")')
+            .next().text().trim();
+          let [h2, m2, s2] = durationText.split(':').map(x => parseInt(x, 10) || 0);
+          let durationInSeconds2 = h2 * 3600 + m2 * 60 + s2;
+
+          let sendEpoch = arrivalEpoch - durationInSeconds2;
+          if (sendEpoch < Math.floor(Date.now() / 1000)) {
+            alert('Abschickzeit liegt in der Vergangenheit!');
+            return;
+          }
+          scheduleSend(sendEpoch);
         });
       }
+    );
+  }
+}
+
+function manualUpdateCountdown() {
+  let heute = new Date();
+  let day   = heute.getDate();
+  let month = heute.getMonth() + 1;
+  let year  = heute.getFullYear();
+
+  let hour   = parseInt($('#arrivalHour').val(), 10);
+  let minute = parseInt($('#arrivalMinute').val(), 10);
+  let second = parseInt($('#arrivalSecond').val(), 10);
+  let dayVal   = parseInt($('#arrivalDay').val(), 10);
+  let monthVal = parseInt($('#arrivalMonth').val(), 10);
+
+  if (isNaN(dayVal))   dayVal = day;
+  if (isNaN(monthVal)) monthVal = month;
+
+  if ([dayVal, monthVal, hour, minute, second].some(x => isNaN(x))) return;
+
+  let arrivalEpoch = Math.floor(new Date(year, monthVal - 1, dayVal, hour, minute, second).getTime() / 1000);
+
+  let $commandTable = $('form[action*="action=command"]').find('table').first();
+  let durationText = $commandTable
+    .find('td:contains("Dauer:"),td:contains("Duur:"),td:contains("Duration:")')
+    .next().text().trim();
+  let [h, m, s] = durationText.split(':').map(x => parseInt(x, 10) || 0);
+  let durationSeconds = h * 3600 + m * 60 + s;
+
+  let sendEpoch = arrivalEpoch - durationSeconds;
+
+  stopAutoSendObserver();
+  $('#sendCountdown').remove();
+
+  $('.sendTime').html(
+    formatTimes(sendEpoch) +
+    ' (<span id="sendCountdown" class="sendTimer" data-endtime="' + sendEpoch + '">-</span>)'
+  );
+
+  Timing.tickHandlers.timers.initTimers('sendTimer');
+
+  if (autoSendEnabled) startAutoSendObserver();
+}
+
+function scheduleSend(sendEpoch) {
+  clearTabCountdown();
+
+  $('.sendTime').html(
+    formatTimes(sendEpoch) +
+    ' (<span id="sendCountdown" class="sendTimer" data-endtime="' + sendEpoch + '">-</span>)'
+  );
+
+  Timing.tickHandlers.timers.initTimers('sendTimer');
+
+  if (autoSendEnabled) startAutoSendObserver();
+}
+
+function clearTabCountdown() {
+  stopAutoSendObserver();
+  $('.sendTimer').remove();
+  $('.sendTime').html('-');
+  document.title = "Stämme";
+}
+
+function startAutoSendObserver() {
+  stopAutoSendObserver();
+  let countdownElem = document.getElementById('sendCountdown');
+  if (!countdownElem) return;
+
+  autoSendObserver = new MutationObserver(function () {
+    let text = countdownElem.textContent.trim();
+    if (autoSendEnabled && text === "0:00:00") {
+      stopAutoSendObserver();
+      setTimeout(function () {
+        let $btn = $('#troop_confirm_submit');
+        if ($btn.length && $btn.is(':visible') && !$btn.prop('disabled')) {
+          $btn.click();
+          clearTabCountdown();
+        }
+      }, Math.random() * (600 - 400) + 400);
     }
-  }
-
-  function startRootObserver() {
-    if (rootObserver) rootObserver.disconnect();
-    rootObserver = new MutationObserver(() => {
-      const $submit = dom.submitBtn;
-      if (isVisible($submit)) {
-        initCommandUI();
-      } else {
-        sendTimeInit = false;
-        dom.clearCountdown();
-      }
-    });
-    rootObserver.observe(document.body, { childList: true, subtree: true });
-  }
-
-  // ---- Bootstrap
-  document.addEventListener('DOMContentLoaded', () => {
-    tryInitConfirmEnhancer();
   });
+  autoSendObserver.observe(countdownElem, { childList: true, characterData: true, subtree: true });
+}
 
-  function tryInitConfirmEnhancer(attempts = 0) {
-    if (isVisible(dom.submitBtn)) {
-      initCommandUI();
-      startRootObserver();
-      log("gestartet");
+function stopAutoSendObserver() {
+  if (autoSendObserver) {
+    autoSendObserver.disconnect();
+    autoSendObserver = null;
+  }
+}
+
+function isVisible($el) {
+  return $el.length > 0 && $el.is(':visible');
+}
+
+const observer = new MutationObserver(function () {
+  const $submit = $('#troop_confirm_submit');
+  if (isVisible($submit)) {
+    initCommandUI();
+  } else {
+    sendTimeInit = false;
+    clearTabCountdown();
+  }
+});
+
+observer.observe(document.body, { childList: true, subtree: true });
+
+function tryInitConfirmEnhancer(attempts = 0) {
+  const $submit = $('#troop_confirm_submit');
+  if (isVisible($submit)) {
+    initCommandUI();
+    console.log("Confirm Enhancer gestartet (Fallback)");
+    return;
+  }
+  if (attempts < 10) {
+    setTimeout(() => tryInitConfirmEnhancer(attempts + 1), 300);
+  } else {
+    console.warn("Confirm Enhancer konnte nicht initialisiert werden.");
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  tryInitConfirmEnhancer();
+});
+
+// --- NEU: Planner-Übernahme bleibt unverändert ---
+async function pickupArrivalFromPlanner() {
+  try {
+    const p = await GM.getValue('pending_arrival', null);
+    if (!p) return;
+
+    // 10 Min. Gültigkeit
+    if (!p.createdAt || (Date.now() - p.createdAt) > 10 * 60 * 1000) {
+      await GM.setValue('pending_arrival', null);
       return;
     }
-    if (attempts < 10) {
-      setTimeout(() => tryInitConfirmEnhancer(attempts + 1), 300);
-    } else {
-      console.warn("Confirm Enhancer konnte nicht initialisiert werden.");
+
+    // Kontext grob prüfen
+    const u = new URL(location.href);
+    const v = u.searchParams.get('village');
+    if (p.village && v && p.village !== v) return;
+
+    // warten bis Inputs existieren
+    const ok = () =>
+      $('#arrivalDay').length &&
+      $('#arrivalMonth').length &&
+      $('#arrivalHour').length &&
+      $('#arrivalMinute').length &&
+      $('#arrivalSecond').length;
+
+    let retries = 0;
+    while (!ok() && retries < 100) { // bis zu ~10s
+      await new Promise(r => setTimeout(r, 100));
+      retries++;
     }
+    if (!ok()) return;
+
+    // Werte setzen
+    let parts = p.arrivalParts;
+    if (!parts) {
+      const m = (p.arrivalStr || '').match(/^(\d{2})\.(\d{2})\.(\d{4}) (\d{2}):(\d{2}):(\d{2})/);
+      if (m) parts = { day:+m[1], month:+m[2], year:+m[3], hour:+m[4], minute:+m[5], second:+m[6] };
+    }
+    if (!parts) return;
+
+    $('#arrivalDay').val(parts.day);
+    $('#arrivalMonth').val(parts.month);
+    $('#arrivalHour').val(parts.hour);
+    $('#arrivalMinute').val(parts.minute);
+    $('#arrivalSecond').val(parts.second);
+
+    if (typeof manualUpdateCountdown === 'function') manualUpdateCountdown();
+
+    // Einmalverbrauch
+    await GM.setValue('pending_arrival', null);
+  } catch (e) {
+    console.warn('pickupArrivalFromPlanner error', e);
   }
-})();
+}
