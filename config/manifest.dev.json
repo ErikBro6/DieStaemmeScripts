@@ -1,5 +1,6 @@
 {
   "baseUrl": "http://localhost:8123",
+  "assetsBase": "http://localhost:8123",
   "routes": {
     "place": [
       "/config/assetsBase.js",

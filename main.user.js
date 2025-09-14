@@ -256,24 +256,40 @@
     throw new Error("Ungültiges Manifest");
   }
 
-  async function bootstrap() {
-    const env = await getEnv();
-    registerEnvMenu(env);
+async function bootstrap() {
+  const env = await getEnv();
+  registerEnvMenu(env);
 
-    let modules = CONFIG.modules; // Fallback
-    try {
-      const manifestUrl = MANIFEST_URLS[env];
-      const manifest = await gmFetchJson(cacheBust(manifestUrl));
-      modules = modulesFromManifest(manifest);
-      log.info(`Manifest (${env}) geladen.`);
-    } catch (e) {
-      log.warn("Manifest laden fehlgeschlagen, nutze CONFIG.modules.", e);
-    }
+  let modules = CONFIG.modules; // Fallback
+  let assetsBase = "";          // <- Standard, falls Manifest fehlt
 
-    window.modules = deepFreeze(modules);
-    window.loadModules = loadModules;
-    loadModules();
+  try {
+    const manifestUrl = MANIFEST_URLS[env];
+    const manifest = await gmFetchJson(cacheBust(manifestUrl));
+
+    // 1) Modules aus Manifest übernehmen (prod: manifest.modules, dev: baseUrl+routes)
+    modules = modulesFromManifest(manifest);
+
+    // 2) Assets-Base setzen (für CSS/HTML der UI-Komponenten)
+    //    Priorität: manifest.assetsBase > manifest.baseUrl > ""
+    assetsBase = manifest.assetsBase || manifest.baseUrl || "";
+
+    log.info(`Manifest (${env}) geladen. DS_ASSETS_BASE=`, assetsBase);
+  } catch (e) {
+    log.warn("Manifest laden fehlgeschlagen, nutze CONFIG.modules.", e);
+    // optional: hier könntest du für PROD einen sinnvollen Default setzen:
+    // assetsBase = "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/<commit>";
   }
+
+  // 3) Global verfügbar machen, damit confirmEnhancer.js die UI-Dateien findet
+  window.DS_ASSETS_BASE = assetsBase;
+
+  // 4) Rest wie gehabt
+  window.modules = deepFreeze(modules);
+  window.loadModules = loadModules;
+  loadModules();
+}
+
 
   // Start
   bootstrap();

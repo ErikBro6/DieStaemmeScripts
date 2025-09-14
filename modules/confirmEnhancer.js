@@ -1,10 +1,20 @@
 // == confirmEnhancer.js (clean, no close-tab) ==
-console.log("Confirm Enhancer (no close-tab)");
+console.log("Confirm Enhancer");
 
 // --- UI Assets (extern) ---
 const UI_BASE = (window.DS_ASSETS_BASE || "").replace(/\/$/, "") + "/ui";
 const TOGGLE_CSS  = UI_BASE + "/toggleButton.css";
 const TOGGLE_HTML = UI_BASE + "/toggleButton.html";
+
+// --- UI Assets (lazy, mit cache-bust) ---
+const CACHE_BUCKET_MS = 60_000;
+const cacheBust = (u) => u + (u.includes("?") ? "&" : "?") + "_cb=" + Math.floor(Date.now()/CACHE_BUCKET_MS);
+
+function uiUrl(rel) {
+  const base = (window.DS_ASSETS_BASE || "").replace(/\/$/, "");
+  return cacheBust(`${base}/ui/${rel}`);
+}
+
 
 // --- kleine Wait-Helper ---
 const delay = (ms) => new Promise(r => setTimeout(r, ms));
@@ -148,13 +158,14 @@ function initCommandUI() {
                 offLabel: "Auto-Senden",
                 onState: "AN",
                 offState: "AUS",
-                cssUrl: TOGGLE_CSS,
-                htmlUrl: TOGGLE_HTML,
+                cssUrl: uiUrl("toggleButton.css"),
+                htmlUrl: uiUrl("toggleButton.html"),
                 onChange: (state) => {
                   autoSendEnabled = state;
                   if (state) startAutoSendObserver(); else stopAutoSendObserver();
                 }
               });
+
               $cell[0].appendChild(btn);
 
               // Auto-Flow: Auto-Senden aktivieren
