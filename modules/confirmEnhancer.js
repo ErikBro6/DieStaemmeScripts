@@ -1,19 +1,19 @@
 // == confirmEnhancer.js (clean, no close-tab) ==
 console.log("Confirm Enhancer");
 
-// --- UI Assets (extern) ---
-const UI_BASE = (window.DS_ASSETS_BASE || "").replace(/\/$/, "") + "/ui";
-const TOGGLE_CSS  = UI_BASE + "/toggleButton.css";
-const TOGGLE_HTML = UI_BASE + "/toggleButton.html";
 
-// --- UI Assets (lazy, mit cache-bust) ---
+
+// at top of confirmEnhancer.js
 const CACHE_BUCKET_MS = 60_000;
 const cacheBust = (u) => u + (u.includes("?") ? "&" : "?") + "_cb=" + Math.floor(Date.now()/CACHE_BUCKET_MS);
 
+// resolve right before use (after DS_ASSETS_BASE is set by bootstrap)
 function uiUrl(rel) {
   const base = (window.DS_ASSETS_BASE || "").replace(/\/$/, "");
   return cacheBust(`${base}/ui/${rel}`);
 }
+
+
 
 
 // --- kleine Wait-Helper ---
@@ -151,20 +151,21 @@ function initCommandUI() {
               return;
             }
             try {
-              const btn = await UI_LIB.createToggleButton({
-                id: "autoSendToggle",
-                initial: autoSendEnabled,
-                onLabel: "Auto-Senden",
-                offLabel: "Auto-Senden",
-                onState: "AN",
-                offState: "AUS",
-                cssUrl: uiUrl("toggleButton.css"),
-                htmlUrl: uiUrl("toggleButton.html"),
-                onChange: (state) => {
-                  autoSendEnabled = state;
-                  if (state) startAutoSendObserver(); else stopAutoSendObserver();
-                }
-              });
+const btn = await UI_LIB.createToggleButton({
+  id: "autoSendToggle",
+  initial: autoSendEnabled,
+  onLabel: "Auto-Senden",
+  offLabel: "Auto-Senden",
+  onState: "AN",
+  offState: "AUS",
+  cssUrl: uiUrl("toggleButton.css"),
+  htmlUrl: uiUrl("toggleButton.html"),
+  onChange: (state) => {
+    autoSendEnabled = state;
+    if (state) startAutoSendObserver(); else stopAutoSendObserver();
+  }
+});
+
 
               $cell[0].appendChild(btn);
 
