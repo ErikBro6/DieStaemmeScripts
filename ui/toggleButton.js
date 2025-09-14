@@ -32,7 +32,7 @@
   UI_LIB.createToggleButton = async function(opts){
     const {
       id, initial=false,
-      onLabel="Auto-Senden", offLabel="Auto-Senden",
+      onLabel="Automatik", offLabel="Automatik",
       onState="AN", offState="AUS",
       cssUrl, htmlUrl,
       onChange=()=>{},

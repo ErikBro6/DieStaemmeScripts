@@ -62,7 +62,7 @@ function enableAutoSendUI() {
     // Fallback für ganz alten Button (sollte nicht mehr nötig sein)
     const $btn = $('#autoSendToggle');
     if ($btn.length) {
-      $btn.text('Auto-Senden: AN').css('background', '#4caf50').css('color', '#fff');
+      $btn.text('Automatik: AN').css('background', '#4caf50').css('color', '#fff');
     }
   }
   // Falls Countdown schon existiert, direkt beobachten
@@ -125,7 +125,7 @@ function initCommandUI() {
         // 3) (Optional) Date+Time-Picker-Container
         $commandTable.find('tr').last().after(`
           <tr>
-            <td style="white-space: nowrap;">Datum & Uhrzeit:</td>
+            <td style="white-space: nowrap;">Datum/ <br> Uhrzeit:</td>
             <td><div id="ds-date-picker"></div></td>
           </tr>
         `);
@@ -139,7 +139,7 @@ function initCommandUI() {
         // 4) Auto-Senden-Button (UI-Komponente)
         if ($('#autoSendToggle').length === 0) {
           const $row = $('<tr>');
-          $row.append('<td style="white-space: nowrap;">&nbsp;</td>');
+          $row.append('<td style="white-space: nowrap;">Automatisch <br> abschicken:</td>');
           const $cell = $('<td>');
           $row.append($cell);
           $commandTable.find('tr').last().after($row);
@@ -154,8 +154,8 @@ function initCommandUI() {
 const btn = await UI_LIB.createToggleButton({
   id: "autoSendToggle",
   initial: autoSendEnabled,
-  onLabel: "Auto-Senden",
-  offLabel: "Auto-Senden",
+  onLabel: "Automatik",
+  offLabel: "Automatik",
   onState: "AN",
   offState: "AUS",
   cssUrl: uiUrl("toggleButton.css"),

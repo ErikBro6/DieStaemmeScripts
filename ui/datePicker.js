@@ -32,7 +32,6 @@ window.DATEPICKER = (function () {
       <label>Uhrzeit</label>
       <input id="dsTime" type="time" step="1">
       <button class="apply" type="button">Übernehmen</button>
-      <div class="hint">Synchron mit TT/MM/HH:MM:SS</div>
     `;
     host.appendChild(wrap);
 
