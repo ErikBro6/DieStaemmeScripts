@@ -6,6 +6,7 @@
 // @author       SpeckMich
 // @connect      raw.githubusercontent.com
 // @connect      localhost
+// @connect      cdn.jsdelivr.net
 // @match        https://*.die-staemme.de/game.php?*
 // @match        https://*ds-ultimate.de/tools/attackPlanner/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=die-staemme.de
