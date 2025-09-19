@@ -1,4 +1,17 @@
-(function (){
+
+
+(function () {
+  "use strict";
+
+  // --- Nur auf place&mode=call aktiv sein ---
+  const params = new URL(location.href).searchParams;
+  const IS_CALL_PAGE = params.get("screen") === "place" && params.get("mode") === "call";
+  if (!IS_CALL_PAGE) {
+    // Auf anderen Seiten nichts tun (kein Redirect, kein Hotkey).
+    return;
+  }
+
+  // (alles Weitere bleibt)
   
 // made by Costache Madalin (lllll llll)
 // discord: costache madalin#8472
@@ -7,15 +20,6 @@ let url=window.location.href
 var countApiKey = "support_sender";
 var countNameSpace="madalinoTribalWarsScripts"
 var heavyCav=4
-
-
-if(!url.includes("screen=place&mode=call"))
-{
-    alert("this script must be run from Rally point-> Mass support");
-    window.location.href=game_data.link_base_pure+"place&mode=call"
-}
-
-
 
 var units=game_data.units;
 var unitsLength=units.length;
@@ -100,19 +104,31 @@ var headerColorAlternateHover=30;
 var backgroundAlternateTableEven=backgroundContainer;
 var backgroundAlternateTableOdd=getColorDarker(backgroundContainer,headerColorAlternateTable);
 
-async function main(){
-    initializationTheme()
-    await $.getScript("https://dl.dropboxusercontent.com/s/i5c0so9hwsizogm/styleCSSGlobal.js?dl=0");
-    createMainInterface()
-    changeTheme()
-    // countTotalTroops()
-    addEvents()
-    hitCountApi()
 
+// --- Hotkey-Start nur auf der Call-Seite -----------------------------------
+(function setupMassSupporterHotkey() {
+  if (window.__ds_ms_hotkey_bound) return;
+  window.__ds_ms_hotkey_bound = true;
 
+  function startNowIfReady() {
+    if (document.getElementById("div_container")) return; // UI schon da
+    try { main(); } catch (err) { console.error("[DS-Tools][MassSupporter] start failed", err); }
+  }
 
-}
-main()
+  document.addEventListener("keydown", (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const key = (e.key || "").toLowerCase();
+    const byCode = e.code === "KeyS";
+    if (!(key === "s" || byCode)) return;
+
+    // Nur hier (mode=call) reagieren, sonst ignorieren:
+    e.preventDefault();
+    e.stopPropagation();
+    try { document.activeElement?.blur?.(); } catch {}
+    startNowIfReady();
+  }, { capture: true });
+})();
+
 
 
 function getColorDarker(hexInput, percent) {
@@ -138,6 +154,20 @@ function getColorDarker(hexInput, percent) {
 
     return `#${("00"+r.toString(16)).slice(-2).toUpperCase()}${("00"+g.toString(16)).slice(-2).toUpperCase()}${("00"+b.toString(16)).slice(-2).toUpperCase()}`
 }
+
+async function main() {
+  initializationTheme();
+  try {
+    await $.getScript("https://dl.dropboxusercontent.com/s/i5c0so9hwsizogm/styleCSSGlobal.js?dl=0");
+  } catch (e) {
+    console.warn("[MassSupporter] styleCSSGlobal laden fehlgeschlagen:", e);
+  }
+  createMainInterface();
+  changeTheme();
+  addEvents();
+  hitCountApi();
+}
+
 function createMainInterface(){
     let rowsSpawnButtons = (game_data.units.includes("archer") == true)?7:6;
     let rowsSpawnDatetimes = (game_data.units.includes("archer") == true)?4:3;

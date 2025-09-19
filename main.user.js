@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SpeckMichs Die Stämme Tool Collection
 // @namespace    https://github.com/deinname/ds-tools
-// @version      2.8.7
+// @version      2.8.8
 // @description  Erweitert die Die Stämme Erfahrung mit einigen Tools und Skripten
 // @author       SpeckMich
 // @connect      raw.githubusercontent.com
@@ -99,18 +99,34 @@
 
   function resolveModuleUrls(ctx) {
     const MODULES = window.modules || {};
+
+    // DS-Ultimate Edit bleibt wie gehabt
     if (
       ctx.host.endsWith("ds-ultimate.de") &&
       /^\/tools\/attackPlanner\/\d+\/edit\/[A-Za-z0-9_-]+/.test(ctx.path)
     ) {
       return toArray(MODULES.attackPlannerEdit);
     }
+
+    // Market bleibt wie gehabt
     if (ctx.screen === "market" && MODULES.market) {
       const key = ctx.mode && MODULES.market[ctx.mode] ? ctx.mode : "default";
       return toArray(MODULES.market[key]);
     }
+
+    // Place: massSupporter nur bei mode=call laden
+    if (ctx.screen === "place") {
+      const urls = toArray(MODULES.place);
+      if (ctx.mode !== "call") {
+        return urls.filter(u => !/massSupporter\.js(?:\?|$)/.test(u));
+      }
+      return urls;
+    }
+
+    // Fallback
     return toArray(MODULES[ctx.screen]);
   }
+
 
   /** ---------------------------------------
    *  Loader (idempotent)
