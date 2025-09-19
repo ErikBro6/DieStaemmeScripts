@@ -1,6 +1,50 @@
 
 
 (function () {
+
+  function setup(name, defaultValue) {
+    if (typeof window[name] === 'undefined')
+        window[name] = defaultValue
+  }
+  
+  function copyTextToClipboard(text) {
+    const textArea = document.createElement("textarea");
+    textArea.style.position = 'fixed';
+    textArea.style.top = 0;
+    textArea.style.left = 0;
+    textArea.style.width = '2em';
+    textArea.style.height = '2em';
+    textArea.style.padding = 0;
+    textArea.style.border = 'none';
+    textArea.style.outline = 'none';
+    textArea.style.boxShadow = 'none';
+    textArea.style.background = 'transparent';
+    textArea.value = text;
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    try {
+        document.execCommand('copy');
+    } catch (err) {//console.log('Oops, unable to copy'); //optional
+    }
+    document.body.removeChild(textArea);
+  } 
+  setup('CopyAndExportButton', true)
+  function addCopyButton() {
+      if (CopyAndExportButton) {
+          let table = $('[id*=_table]');
+          if (table.length !== 0) {
+              table.find('th:nth-child(2)').append($('<button id="copy_villages" class="btn" style="margin-left: 1em;">D\u00F6rfer kopieren</button>'))
+              document.querySelector("#copy_villages").addEventListener('click', function(event) {
+                  let villageText = table.find('tr[class*=row] td:nth-child(2)').text().match(/\(\d{3}\|\d{3}\) K/g).join().match(/\d{3}\|\d{3}/g).join(' \n')
+                  copyTextToClipboard(villageText);
+              });
+          }
+      }
+  }
+  addCopyButton()
+
+
   const TABLE_ID = "combined_table";
   const ONLY_UNIT_CELLS = true; // nur .unit-item summieren, sonst alles rechts der Farm
 

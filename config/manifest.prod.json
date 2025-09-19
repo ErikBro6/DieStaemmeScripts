@@ -6,7 +6,8 @@
       "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/ui/toggleButton.js",
       "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/ui/datePicker.js",
       "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/confirmEnhancer.js",
-      "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/autoSender.js"
+      "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/autoSender.js",
+      "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/massSupporter.js"
     ],
     "map": [
       "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/config/assetsBase.js",
