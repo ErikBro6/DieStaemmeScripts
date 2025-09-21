@@ -53,7 +53,7 @@
   };
 
   // Einheiten die 9999→alle klicken sollen
-  const AUTO_ALL_UNITS = ['axe'];
+  const AUTO_ALL_UNITS = ['axe', 'catapult'];
 
   const unitsApplied = {};
 
