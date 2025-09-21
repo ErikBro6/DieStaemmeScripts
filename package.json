@@ -1,0 +1,19 @@
+{
+  "scripts": {
+    "clean": "node -e \"import('node:fs').then(fs=>fs.rmSync('dist',{recursive:true,force:true}))\"",
+    "build:core": "rollup -c",
+    "build:manifest": "node scripts/build-manifest.mjs",
+    "build": "npm run clean && npm run build:core && npm run build:manifest",
+    "postbuild": "node -e \"import('node:fs').then(fs=>fs.copyFileSync('dist/userscript/main.user.js','dist/cdn/main.user.js'))\"",
+    "dev:server": "node node_modules/http-server/bin/http-server dist/cdn -p 8123 -c-1",
+    "dev": "npm run build && npm run dev:server"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^28.0.6",
+    "@rollup/plugin-node-resolve": "^16.0.1",
+    "http-server": "^14.1.1",
+    "postcss": "^8.5.6",
+    "rollup-plugin-esbuild": "^6.2.1",
+    "rollup-plugin-postcss": "^4.0.2"
+  }
+}

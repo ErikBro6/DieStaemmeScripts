@@ -1,0 +1,8 @@
+{
+  "assets": { "css": "styles/app.css" },
+  "routes": {
+    "place": ["modules/place/confirmEnhancer/index.js"],
+    "map":   ["modules/place/confirmEnhancer/index.js"],
+    "market": { "resource_balancer": "modules/market/resource_balancer.js" }
+  }
+}

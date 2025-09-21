@@ -1,31 +1,26 @@
 {
+  "baseUrl": "https://cdn.jsdelivr.net/gh/ErikBro6/DieStaemmeScripts@v2.9.0",
+  "assets": {
+    "cssUrl": "https://cdn.jsdelivr.net/gh/ErikBro6/DieStaemmeScripts@v2.9.0/styles/app.css"
+  },
   "modules": {
-    "assetsBase": "https://cdn.jsdelivr.net/gh/ErikBro6/DieStaemmeScripts@master",
     "place": [
-      "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/config/assetsBase.js",
-      "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/ui/toggleButton.js",
-      "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/ui/datePicker.js",
-      "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/confirmEnhancer.js",
-      "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/autoSender.js",
-      "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/massSupporter.js"
+      {
+        "url": "https://cdn.jsdelivr.net/gh/ErikBro6/DieStaemmeScripts@v2.9.0/modules/place/confirmEnhancer/index-C2E7cwoZ.js",
+        "integrity": "sha256-dxrer1UbkARbRD9N7z7KLUCpk09HOY4L8v927YT4a+M="
+      }
     ],
     "map": [
-      "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/config/assetsBase.js",
-      "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/ui/toggleButton.js",
-      "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/ui/datePicker.js",
-      "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/confirmEnhancer.js",
-      "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/lineMap.js",
-      "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/tooltip.js",
-      "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/pickVillages.js"
+      {
+        "url": "https://cdn.jsdelivr.net/gh/ErikBro6/DieStaemmeScripts@v2.9.0/modules/place/confirmEnhancer/index-C2E7cwoZ.js",
+        "integrity": "sha256-dxrer1UbkARbRD9N7z7KLUCpk09HOY4L8v927YT4a+M="
+      }
     ],
-    "overview_villages": "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/overviewCombined.js",
     "market": {
-      "resource_balancer": "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/resBalancer.js",
-      "default": "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/menu/resBalancerMenuPoint.js"
-    },
-    "attackPlannerEdit": [
-      "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/dsUltimateTimingSaver.js",
-      "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/dsUltimateAutoSender.js"
-    ]
+      "resource_balancer": {
+        "url": "https://cdn.jsdelivr.net/gh/ErikBro6/DieStaemmeScripts@v2.9.0/modules/market/resource_balancer-wOxyJ15t.js",
+        "integrity": "sha256-gPEdaVB3U3eg8GA4/ZL1o7QD9hpvpH3OHRMVJDk4Ip0="
+      }
+    }
   }
 }

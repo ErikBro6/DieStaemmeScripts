@@ -1,0 +1,3 @@
+:host { --ds-accent: #4f46e5; --ds-bg: #111827; --ds-text: #e5e7eb; }
+.ds-card { border-radius: 12px; padding: 8px 12px; box-shadow: 0 2px 12px rgba(0,0,0,.25); background: var(--ds-bg); color: var(--ds-text); }
+.ds-btn { cursor: pointer; border: 0; padding: 6px 10px; border-radius: 8px; background: var(--ds-accent); color: white; }
