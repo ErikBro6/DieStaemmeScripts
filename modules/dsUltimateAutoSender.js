@@ -42,50 +42,68 @@
     }
   });
 
-  function openAutoTab(href, token) {
-    // nur im automatischen Pfad auto=1 + autotoken anhängen
-    let url = withParam(href, 'auto', '1');
-    url = withParam(url, 'autotoken', token);
+async function openAutoTab(href, token) {
+  let url = withParam(href, 'auto', '1');
+  url = withParam(url, 'autotoken', token);
 
+  try {
+    const abs = new URL(href, location.href).toString();
+    const h = new URL(href, location.href).hostname; // z.B. de245.die-staemme.de
+    const sub = h.split('.')[0];                     // de245
 
-    try {
-      const h = new URL(href, location.href).hostname; 
-      const sub = h.split('.')[0];                     
-      if (/^de\d+$/.test(sub)) {
-        url = withParam(url, 'autoworld', sub);        
-      }
-    } catch {}
+    if (/^de\d+$/.test(sub)) {
+      url = withParam(url, 'autoworld', sub);
 
-    const handle = GM_openInTab
-      ? GM_openInTab(url, { active: true, insert: true, setParent: true })
-      : window.open(url, '_blank', 'noopener,noreferrer');
+      // 1) Auto-Click-Hint (für session_expired)
+      const FLOW_KEY = 'ds_auto_flow_hints';
+      const now = Date.now();
+      const TTL_MS = 5 * 60_000; // 5 Minuten
+      const flowHint = { world: sub, ts: now, ttl: TTL_MS };
 
-    // nur speichern, wenn wir wirklich ein Handle bekommen haben
-    if (handle) openedTabs.set(token, handle);
-    return handle;
-  }
+      const flowList = (await GM.getValue(FLOW_KEY, [])) || [];
+      const flowFresh = flowList.filter(x => (now - (x.ts || 0)) < (x.ttl || TTL_MS));
+      flowFresh.push(flowHint);
+      await GM.setValue(FLOW_KEY, flowFresh);
 
-  async function triggerSend(tr, rowId) {
-    const a = findSendAnchor(tr);
-    if (!a) {
-      console.warn('Kein Send-Link gefunden für Row:', rowId);
-      return;
+      // 2) Return-Hint (für Redirect nach Login)
+      const RETURN_KEY = 'ds_return_hints';
+      const retList = (await GM.getValue(RETURN_KEY, [])) || [];
+      const retFresh = retList.filter(x => (now - (x.ts || 0)) < (x.ttl || TTL_MS));
+      // pro Welt überschreiben statt stapeln
+      const others = retFresh.filter(x => x.world !== sub);
+      others.push({ world: sub, url: abs, ts: now, ttl: TTL_MS });
+      await GM.setValue(RETURN_KEY, others);
     }
-    const href = a.getAttribute('href');
-    if (!href) return;
-
-    // Doppel-Trigger sofort verhindern
-    fired.add(rowId);
-
-    // eindeutiger Token pro Öffnung
-    const token = `auto_${rowId}_${Date.now()}`;
-
-    // neuen Tab öffnen (Auto-Flow → auto=1 & autotoken)
-    openAutoTab(href, token);
-
-    // Feedback
-    tr.style.outline = '2px solid limegreen';
+  } catch (e) {
+    console.warn('[DS-Tools] Hint-Setup fehlgeschlagen:', e);
   }
+
+  const handle = GM_openInTab
+    ? GM_openInTab(url, { active: true, insert: true, setParent: true })
+    : window.open(url, '_blank', 'noopener,noreferrer');
+
+  if (handle) openedTabs.set(token, handle);
+  return handle;
+}
+
+
+
+
+async function triggerSend(tr, rowId) {
+  const a = findSendAnchor(tr);
+  if (!a) { console.warn('Kein Send-Link gefunden für Row:', rowId); return; }
+  const href = a.getAttribute('href');
+  if (!href) return;
+
+  fired.add(rowId);
+  const token = `auto_${rowId}_${Date.now()}`;
+
+  // Wichtig: warten, bis der Hint sicher gespeichert ist
+  await openAutoTab(href, token);
+
+  tr.style.outline = '2px solid limegreen';
+}
+
 
   function checkRow(tr) {
     const rowId = tr.getAttribute('id');

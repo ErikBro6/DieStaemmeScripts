@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SpeckMichs Die Stämme Tool Collection
 // @namespace    https://github.com/deinname/ds-tools
-// @version      2.8.9
+// @version      2.9.0
 // @description  Erweitert die Die Stämme Erfahrung mit einigen Tools und Skripten
 // @author       SpeckMich
 // @connect      raw.githubusercontent.com
@@ -31,6 +31,7 @@
   const CONFIG = {
     cacheBustIntervalSec: 60,
     modules: {
+        "returnRedirector": "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/<commit>/modules/returnRedirector.js",
         "session_expired": "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/<commit>/modules/autoWorldSelector.js",
             "place": [
         "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/<commit>/config/assetsBase.js",
@@ -101,31 +102,32 @@
 
   function resolveModuleUrls(ctx) {
     const MODULES = window.modules || {};
+    const urls = [];
 
-    if (ctx.host === "www.die-staemme.de" && ctx.url.searchParams.get("session_expired") === "1") {
-      return toArray(MODULES.session_expired);
+    // Welt-Subdomain? Dann Redirector immer hinzufügen
+    if (/^de\d+\.die-staemme\.de$/.test(ctx.host) && MODULES.returnRedirector) {
+      urls.push(MODULES.returnRedirector);
     }
 
+    // … dein bestehendes Routing wie gehabt:
+    if (ctx.host === "www.die-staemme.de" && ctx.url.searchParams.get("session_expired") === "1") {
+      return urls.concat(toArray(MODULES.session_expired));
+    }
     if (ctx.host.endsWith("ds-ultimate.de") &&
         /^\/tools\/attackPlanner\/\d+\/edit\/[A-Za-z0-9_-]+/.test(ctx.path)) {
-      return toArray(MODULES.attackPlannerEdit);
+      return urls.concat(toArray(MODULES.attackPlannerEdit));
     }
-
     if (ctx.screen === "market" && MODULES.market) {
       const key = ctx.mode && MODULES.market[ctx.mode] ? ctx.mode : "default";
-      return toArray(MODULES.market[key]);
+      return urls.concat(toArray(MODULES.market[key]));
     }
-
     if (ctx.screen === "place") {
-      const urls = toArray(MODULES.place);
-      if (ctx.mode !== "call") {
-        return urls.filter(u => !/\/massSupporter\.js(\?|$)/.test(u));
-      }
-      return urls;
+      const list = toArray(MODULES.place);
+      return urls.concat(ctx.mode !== "call" ? list.filter(u => !/\/massSupporter\.js(\?|$)/.test(u)) : list);
     }
-
-    return toArray(MODULES[ctx.screen]);
+    return urls.concat(toArray(MODULES[ctx.screen]));
   }
+
 
 
   /** ---------------------------------------
