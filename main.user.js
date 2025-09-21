@@ -7,6 +7,7 @@
 // @connect      raw.githubusercontent.com
 // @connect      localhost
 // @connect      cdn.jsdelivr.net
+// @match        https://www.die-staemme.de/*
 // @match        https://*.die-staemme.de/game.php?*
 // @match        https://*ds-ultimate.de/tools/attackPlanner/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=die-staemme.de
@@ -30,6 +31,7 @@
   const CONFIG = {
     cacheBustIntervalSec: 60,
     modules: {
+        "session_expired": "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/<commit>/modules/autoWorldSelector.js",
             "place": [
         "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/<commit>/config/assetsBase.js",
         "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/<commit>/ui/toggleButton.js",
@@ -99,6 +101,10 @@
 
   function resolveModuleUrls(ctx) {
     const MODULES = window.modules || {};
+
+    if (ctx.host === "www.die-staemme.de" && ctx.url.searchParams.get("session_expired") === "1") {
+      return toArray(MODULES.session_expired);
+    }
 
     if (ctx.host.endsWith("ds-ultimate.de") &&
         /^\/tools\/attackPlanner\/\d+\/edit\/[A-Za-z0-9_-]+/.test(ctx.path)) {

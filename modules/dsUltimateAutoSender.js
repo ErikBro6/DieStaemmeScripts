@@ -47,6 +47,15 @@
     let url = withParam(href, 'auto', '1');
     url = withParam(url, 'autotoken', token);
 
+
+    try {
+      const h = new URL(href, location.href).hostname; 
+      const sub = h.split('.')[0];                     
+      if (/^de\d+$/.test(sub)) {
+        url = withParam(url, 'autoworld', sub);        
+      }
+    } catch {}
+
     const handle = GM_openInTab
       ? GM_openInTab(url, { active: true, insert: true, setParent: true })
       : window.open(url, '_blank', 'noopener,noreferrer');

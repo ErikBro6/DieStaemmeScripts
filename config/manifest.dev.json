@@ -2,6 +2,7 @@
   "baseUrl": "http://localhost:8123",
   "assetsBase": "http://localhost:8123",
   "routes": {
+    "session_expired": "/modules/autoWorldSelector.js",
     "place": [
       "/config/assetsBase.js",
       "/ui/toggleButton.js",

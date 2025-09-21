@@ -1,6 +1,7 @@
 {
   "modules": {
     "assetsBase": "https://cdn.jsdelivr.net/gh/ErikBro6/DieStaemmeScripts@master",
+    "session_expired": "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/autoWorldSelector.js",
     "place": [
       "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/config/assetsBase.js",
       "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/ui/toggleButton.js",
