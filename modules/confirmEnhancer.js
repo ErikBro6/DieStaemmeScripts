@@ -262,9 +262,7 @@ const btn = await UI_LIB.createToggleButton({
           if (isAutoFlow() && $('#autoSendToggle').length && !autoSendEnabled) {
             enableAutoSendUI();
           }
-        } else {
-          UI.ErrorMessage('Keine Befehle gefunden');
-        }
+        } 
 
         // 7) „Start Ankunfts-Senden“-Button binden
         $('#startArrivalSend').off('click').on('click', function () {
