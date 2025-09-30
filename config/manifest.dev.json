@@ -27,6 +27,7 @@
     "attackPlannerEdit": [
       "/modules/dsUltimateTimingSaver.js",
       "/modules/dsUltimateAutoSender.js"
-    ]
+    ],
+    "info_player": "/modules/playerInfoTools.js"
   }
 }
