@@ -31,6 +31,11 @@ win.activationCharCode = 'b';
         
         // NEW: toggle to select all villages of the clicked player's owner
         selectAllByPlayer: false,
+
+        // NEW: caches for world map files
+        _worldVillages: null, // Array<{id:number,x:number,y:number,owner:number}>
+        _worldPlayers: null,  // Map-like: { [playerId:number]: {ally:number} }
+        _mapsLoading: false,
  
         lang: {
             de: {
@@ -69,6 +74,7 @@ win.activationCharCode = 'b';
                     continue;
                 }
                 var v = $('#map_village_' + villageId);
+                if (!v.length) continue; // NEW: only if present in DOM
                 $('<div class="DSSelectVillagesOverlay" id="DSSelectVillages_overlay_' + villageId + '" style="width:52px; height:37px; position: absolute; z-index: 50; left:' + $(v).css('left') + '; top: ' + $(v).css('top') + ';"></div>').appendTo(v.parent());
                 $('#DSSelectVillages_overlay_' + villageId).css('outline', '2px solid red');
             }
@@ -130,7 +136,7 @@ win.activationCharCode = 'b';
 
             // Jetzt erst Events binden (Element existiert)
             $('#startAttackPlanner').on('click', function() {
-                window.open('https://staemmedb.de/attackPlaner', '_blank'); // gleiche Seite? -> window.location.href=...
+                window.open('https://staemmedb.de/attackPlaner', '_blank');
             });
 
             var chkbxBBcode = $('#bbcode');
@@ -179,7 +185,19 @@ win.activationCharCode = 'b';
             });
         },
 
-        // NEW: helper to add a single village if eligible (reuses your filtering & overlay)
+        // NEW: helper to add a single village by id & coords (works even if not in TWMap cache)
+        addVillageByIdCoord: function(villageId, x, y, update) {
+            var coord = x + "|" + y;
+            if (this.villages.indexOf(coord) !== -1) return;
+
+            this.villages.push(coord);
+            this.villagesId.push(villageId);
+            // overlay will be created by spawnSector when the sector is visible
+            this.markVillageAsSelected(villageId);
+            if (update) win.TWMap.reload();
+        },
+
+        // (old helper kept for local/visible fallback paths)
         addVillageIfEligible: function(x, y, update) {
             var coord = x + "|" + y;
             if (this.villages.indexOf(coord) !== -1) return;
@@ -196,20 +214,138 @@ win.activationCharCode = 'b';
             if (update) win.TWMap.reload();
         },
 
-        // NEW: bulk add all villages by the same owner as the clicked village
-        bulkAddByOwner: function(ownerId) {
-            for (var key in win.TWMap.villages) {
-                if (!win.TWMap.villages.hasOwnProperty(key)) continue;
-                var v = win.TWMap.villages[key];
-                if (!v || v.owner !== ownerId) continue;
+        // NEW: normalize owner id from TWMap village (string/number compatibility)
+        _getOwnerIdFromTW: function(villageObj) {
+            var raw = (villageObj && (villageObj.owner != null ? villageObj.owner :
+                                      (villageObj.owner_id != null ? villageObj.owner_id :
+                                       villageObj.player_id)));
+            var n = Number(raw);
+            return isNaN(n) ? 0 : n;
+        },
 
-                var k = parseInt(key, 10);
-                var x = Math.floor(k / 1000);
-                var y = k % 1000;
+        // NEW: load and cache /map/village.txt and /map/player.txt
+        _ensureWorldMaps: function() {
+            var self = this;
+            if (self._worldVillages && self._worldPlayers) return Promise.resolve();
 
-                this.addVillageIfEligible(x, y, false);
+            if (self._mapsLoading) {
+                // avoid parallel fetches
+                return new Promise(function(resolve) {
+                    var chk = setInterval(function() {
+                        if (self._worldVillages && self._worldPlayers) {
+                            clearInterval(chk);
+                            resolve();
+                        }
+                    }, 100);
+                });
             }
-            this.outputCoords();
+
+            self._mapsLoading = true;
+
+            var base = location.origin.replace(/\/$/, '');
+            var urlVillages = base + '/map/village.txt';
+            var urlPlayers  = base + '/map/player.txt';
+
+            function fetchText(url) {
+                // no-cache to avoid stale lists
+                return fetch(url, { credentials: 'include', cache: 'no-store' }).then(function(r) { return r.text(); });
+            }
+
+            function smartSplit(line) {
+                // prefer commas (as in your sample), fallback to semicolons
+                var a = line.split(',');
+                if (a.length < 5) a = line.split(';');
+                return a;
+            }
+
+            function parseVillageTxt(txt) {
+                // Expected (per sample): id,name,x,y,player_id,points,rank
+                var lines = txt.trim().split(/\r?\n/);
+                var out = [];
+                for (var i = 0; i < lines.length; i++) {
+                    var line = lines[i];
+                    if (!line) continue;
+                    var p = smartSplit(line);
+                    if (p.length < 5) continue;
+                    var id = Number(p[0]);
+                    var x = Number(p[2]);
+                    var y = Number(p[3]);
+                    var owner = Number(p[4]); // can be 0 for barbs, or big numbers (as in sample)
+                    if (!isFinite(id) || !isFinite(x) || !isFinite(y) || isNaN(owner)) continue;
+                    out.push({ id: id, x: x, y: y, owner: owner });
+                }
+                return out;
+            }
+
+            function parsePlayerTxt(txt) {
+                // Format: id,name,ally_id,villages,points,rank  (comma or semicolon)
+                var lines = txt.trim().split(/\r?\n/);
+                var map = Object.create(null);
+                for (var i = 0; i < lines.length; i++) {
+                    var line = lines[i];
+                    if (!line) continue;
+                    var p = smartSplit(line);
+                    if (p.length < 3) continue;
+                    var pid = Number(p[0]);
+                    var ally = Number(p[2]);
+                    if (!isFinite(pid)) continue;
+                    map[pid] = { ally: isFinite(ally) ? ally : 0 };
+                }
+                return map;
+            }
+
+            return Promise.all([fetchText(urlVillages), fetchText(urlPlayers)]).then(function(res) {
+                self._worldVillages = parseVillageTxt(res[0]);
+                self._worldPlayers  = parsePlayerTxt(res[1]);
+            }).catch(function(e) {
+                console.error('DSSelectVillages map fetch failed', e);
+            }).finally(function() {
+                self._mapsLoading = false;
+            });
+        },
+
+        // NEW: bulk add all villages by the same owner (worldwide, via village.txt)
+        bulkAddByOwner: function(ownerIdRaw) {
+            var self = this;
+            var ownerId = Number(ownerIdRaw); // normalize for reliable matching
+            if (!isFinite(ownerId)) ownerId = 0;
+
+            return this._ensureWorldMaps().then(function() {
+                // If world file missing for any reason, fallback to visible-only
+                if (!self._worldVillages) {
+                    for (var key in win.TWMap.villages) {
+                        if (!win.TWMap.villages.hasOwnProperty(key)) continue;
+                        var v = win.TWMap.villages[key];
+                        if (!v) continue;
+                        var vOwner = self._getOwnerIdFromTW(v);
+                        if (Number(vOwner) !== ownerId) continue;
+
+                        var k = parseInt(key, 10);
+                        var x = Math.floor(k / 1000);
+                        var y = k % 1000;
+                        self.addVillageIfEligible(x, y, false);
+                    }
+                    self.outputCoords();
+                    return;
+                }
+
+                // Diplomacy filter only if we can resolve ally via player.txt
+                if (self.filter && self._worldPlayers && ownerId) {
+                    var allyId = (self._worldPlayers[ownerId] && self._worldPlayers[ownerId].ally) || 0;
+                    var rel = self.allyRelations[allyId];
+                    if (rel === 'nap' || rel === 'partner') {
+                        return; // skip entirely
+                    }
+                }
+
+                // Collect all villages owned by ownerId
+                for (var i = 0; i < self._worldVillages.length; i++) {
+                    var vv = self._worldVillages[i];
+                    if (Number(vv.owner) !== ownerId) continue;
+                    self.addVillageByIdCoord(vv.id, vv.x, vv.y, false);
+                }
+                self.outputCoords();
+            });
         },
  
         outputCoords: function() {
@@ -283,11 +419,15 @@ win.activationCharCode = 'b';
             }
 
             if (index === -1) {
-                // NEW: if toggle is on, select all villages of this owner in one go
+                // NEW: if toggle is on, select all villages of this owner (WORLDWIDE via village.txt)
                 if (this.selectAllByPlayer) {
-                    this.bulkAddByOwner(village.owner);
-                    if (update) win.TWMap.reload();
-                    return this.outputCoords();
+                    var ownerNorm = this._getOwnerIdFromTW(village); // ensure numeric
+                    var self = this;
+                    this.bulkAddByOwner(ownerNorm).then(function() {
+                        if (update) win.TWMap.reload();
+                        self.outputCoords();
+                    });
+                    return;
                 }
 
                 // original single-add path (with diplomacy filter)
