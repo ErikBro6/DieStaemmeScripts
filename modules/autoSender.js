@@ -3,7 +3,6 @@
 
   const PARAM_KEY  = 'auto';
   const PARAM_VAL  = '1';
-  const BTN_SEL    = '#target_attack';
   const SCAN_MS    = 300;
   const TIMEOUT_MS = 150_000;
 
@@ -20,6 +19,7 @@
   const onceKey = 'ds_auto_sent_' + url.pathname + '?' + url.search;
   if (sessionStorage.getItem(onceKey) === '1') return;
 
+  // keep your existing behavior; we are NOT introducing any ?action= changes
   if (cameByRef && !hasParam) {
     url.searchParams.set(PARAM_KEY, PARAM_VAL);
     history.replaceState(null, '', url);
@@ -53,7 +53,7 @@
   };
 
   // Einheiten die 9999→alle klicken sollen
-  const AUTO_ALL_UNITS = ['axe', 'catapult'];
+  const AUTO_ALL_UNITS = ['axe', 'catapult', 'heavy', 'sword', 'spear'];
 
   const unitsApplied = {};
 
@@ -104,10 +104,43 @@
     return allOk;
   }
 
+  // --- NEW: Decide button based on unit composition, not URL ---
+  function getUnitVal(name) {
+    const el = document.querySelector(`input.unitsInput[name="${name}"]`);
+    return el ? Number((el.value || '0').trim()) || 0 : 0;
+  }
+
+  // Offense & defense families (includes archery-world variants if present)
+  const OFFENSE_UNITS = ['axe','light','ram','catapult','marcher','knight']; // 'marcher' for mounted archers (if enabled), knight counts as offensive for intent
+  const DEFENSE_UNITS = ['spear','sword','heavy','archer']; // 'archer' on archery worlds
+
+  function pickButton() {
+    const attackBtn  = document.querySelector('#target_attack');
+    const supportBtn = document.querySelector('#target_support');
+
+    // if support button doesn't exist, fallback to attack
+    if (!supportBtn) return attackBtn || null;
+
+    // compute sums after ensureUnitsIfNeeded() has possibly modified inputs
+    let sumOff = 0, sumDef = 0;
+
+    for (const u of OFFENSE_UNITS) sumOff += getUnitVal(u);
+    for (const u of DEFENSE_UNITS) sumDef += getUnitVal(u);
+
+    // Decision:
+    // - If there's any offense, prefer ATTACK.
+    // - Else if there's any defense (and no offense), choose SUPPORT.
+    // - Else fallback to ATTACK.
+    if (sumOff > 0) return attackBtn || supportBtn || null;
+    if (sumDef > 0) return supportBtn;
+    return attackBtn || supportBtn || null;
+  }
+
   function tryClick() {
     if (!ensureUnitsIfNeeded()) return false;
 
-    const btn = document.querySelector(BTN_SEL);
+    // was: const btn = document.querySelector(BTN_SEL);
+    const btn = pickButton();
     if (!btn || btn.disabled) return false;
 
     prepareFormForAuto(btn);
