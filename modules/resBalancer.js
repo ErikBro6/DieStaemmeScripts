@@ -84,207 +84,263 @@ function getColorDarker(hexInput, percent) {
     
 
 
-function createMainInterface(){
-    console.log("createInterface")
-    let message_info_factor=`<p>if the factor is 0 your villages will receive resources only for building construction(from account manager)\n</p>
-        <p>if the factor is 1 resources will be distributed equally, at the end of balancing every village will have the same amount of resources\n</p>
-        <p>if it's for example 0.2 in this case your villages will receive 20% from average value of each resources and in adition will receive enough resources for building construction(from account manager)</p>`
-    let message_info_construction=`<p>set for how many hours the villages should have resources for building construction\n</p>
-                <p> your account manager must be active and your villages must have a template construction active,
-                otherwise this setting will be ignored `
+function createMainInterface() {
+  console.log("createInterface");
 
-    let message_info_cluster=`<p>if it's set to 1 cluster then balancing resources will be globally and for 2 or more it will be locally per each cluster\n</p>
-        <p>a larger number of clusters results in a shorter maximum travel time and balanced more locally which is less optimal \n</p>
-        <p>every time the script is run clusters are calculated randomly and they may not be optimally calculated  every time so look out for maximum travel distance \n</p>
-        <p>if it's run on the map it can be seen how clusters were formed and how many resources are sent and received\n</p>`
+  // --- guard: find the right-hand content cell (second td[valign="top"]) ---
+  const tds = document.querySelector('#content_value > table:nth-of-type(2) td[valign="top"]:last-of-type');
+  const contentCell = tds && tds.length >= 2 ? tds[1] : null;
+  if (!contentCell) {
+    console.warn("Resource Balancer: content cell not found. Falling back to #content_value/body.");
+  }
 
+  // --- mark left menu item as selected (first-party feel) ---
+  const menuItem = document.getElementById('id_resource_balancer');
+  if (menuItem) {
+    // remove previous selection
+    menuItem.parentElement?.querySelectorAll('tr').forEach(tr => tr.classList.remove('selected'));
+    menuItem.classList.add('selected');
+  }
 
-    let message_max_construction=`<p>if average factor is smaller than 0.5 \n</p>
-        <p>the value for construction time will be set automatically at maximum value \n</p>
-        <p>where surplus is higher than deficit for all type of resources\n</p>`
+  // --- Help texts (short, native UI.InfoMessage friendly) ---
+  const message_info_factor = `<p>0 = nur Bauvorrat halten, 1 = alle Dörfer angleichen.</p>`;
+  const message_info_construction = `<p>Stunden Bauvorrat (Account-Manager Vorlagen erforderlich).</p>`;
+  const message_info_cluster = `<p>Cluster: 1 = global; höher = lokaler (kürzere Laufzeit).</p>`;
+  const message_max_construction = `<p>Wenn Ø-Faktor &lt; 0.5, kann Bauzeit zur Überschussmenge erhöht werden.</p>`;
+  const message_info_incoming = `<p>Eingehende Transporte in die Berechnung einbeziehen.</p>`;
+  const message_info_resources = `<p>Pro Rohstoff oberhalb dieses Wertes wird nicht angefasst.</p>`;
+  const message_info_exclude = `<p>Neugegründete Dörfer (VP 0–3) ausschließen.</p>`;
+  const message_info_avoidSending = `<p>Nicht aus angegriffenen Dörfern senden (ignoriert bei Ø-Faktor = 1).</p>`;
+  const message_info_avoidReceving = `<p>Nicht an angegriffene Dörfer senden (ignoriert bei Ø-Faktor = 1).</p>`;
+  const message_info_width = `<p>Breitenwächter für ältere Layouts.</p>`;
 
-    let html_info=`
-    
-    <div id="div_container" class="scriptContainer" >
-        <div class="scriptHeader">
-            <div style=" margin-top:10px;"><h2>Resources balancer</h2></div>
-            <div style="position:absolute;top:10px;right: 10px;"><a href="#" onclick="$('#div_container').remove()"><img src="https://img.icons8.com/emoji/24/000000/cross-mark-button-emoji.png"/></a></div>
-            <div style="position:absolute;top:8px;right: 35px;" id="div_minimize"><a href="#"><img src="https://img.icons8.com/plasticine/28/000000/minimize-window.png"/></a></div>
-            <div style="position:absolute;top:10px;right: 60px;" id="div_theme"><a href="#" onclick="$('#theme_settings').toggle()"><img src="https://img.icons8.com/material-sharp/24/fa314a/change-theme.png"/></a></div>
+  // --- Inline, first-party markup (no floating/draggable styles) ---
+  const html = `
+    <div id="rb_panel">
+
+        <h3 style="margin-top:0;">Resource Balancer</h3>
+    <div id="theme_settings" style="display:none"></div>
+
+      <div id="div_body" style="max-width: 980px;">
+        <table id="table_main" class="vis" style="width:100%;">
+          <tr>
+            <th style="width:50%;">Einstellung</th>
+            <th>Wert</th>
+          </tr>
+
+          <tr>
+            <td>Reserve merchants</td>
+            <td>
+              <div style="display:flex;justify-content:flex-start;align-items:center;gap:6px;">
+                <input type="number" id="nr_merchants_reserve" placeholder="15" value="0" style="width:120px">
+                <a href="#" onclick="UI.InfoMessage('Wie viele Händler zuhause bleiben sollen.',4000)"><img src="https://dsde.innogamescdn.com/asset/4e165360/graphic/questionmark.png" style="width:13px;height:13px"></a>
+              </div>
+            </td>
+          </tr>
+
+          <tr>
+            <td>Construction time [h]</td>
+            <td>
+              <div style="display:flex;justify-content:flex-start;align-items:center;gap:6px;">
+                <input type="number" id="time_construction" placeholder="0" value="0" style="width:120px">
+                <a href="#" onclick="UI.InfoMessage(\`${message_info_construction}\`,4000)"><img src="https://dsde.innogamescdn.com/asset/4e165360/graphic/questionmark.png" style="width:13px;height:13px"></a>
+              </div>
+            </td>
+          </tr>
+
+          <tr>
+            <td>Average factor</td>
+            <td>
+              <div style="display:flex;justify-content:flex-start;align-items:center;gap:6px;">
+                <input type="number" id="resources_factor" placeholder="0.5" value="0.5" min="0" max="1" step="0.01" style="width:120px">
+                <a href="#" onclick="UI.InfoMessage(\`${message_info_factor}\`,4000)"><img src="https://dsde.innogamescdn.com/asset/4e165360/graphic/questionmark.png" style="width:13px;height:13px"></a>
+              </div>
+            </td>
+          </tr>
+
+          <tr>
+            <td>Maximize construction time</td>
+            <td>
+              <div style="display:flex;justify-content:flex-start;align-items:center;gap:6px;">
+                <input type="checkbox" id="maximize_construction">
+                <a href="#" onclick="UI.InfoMessage(\`${message_max_construction}\`,4000)"><img src="https://dsde.innogamescdn.com/asset/4e165360/graphic/questionmark.png" style="width:13px;height:13px"></a>
+              </div>
+            </td>
+          </tr>
+
+          <tr>
+            <td>Clusters</td>
+            <td>
+              <div style="display:flex;justify-content:flex-start;align-items:center;gap:6px;">
+                <input type="number" id="nr_clusters" placeholder="1" value="1" min="1" step="1" style="width:120px">
+                <a href="#" onclick="UI.InfoMessage(\`${message_info_cluster}\`,4000)"><img src="https://dsde.innogamescdn.com/asset/4e165360/graphic/questionmark.png" style="width:13px;height:13px"></a>
+              </div>
+            </td>
+          </tr>
+
+          <tr>
+            <td>Include incoming transports</td>
+            <td>
+              <div style="display:flex;justify-content:flex-start;align-items:center;gap:6px;">
+                <input type="checkbox" id="include_incoming">
+                <a href="#" onclick="UI.InfoMessage(\`${message_info_incoming}\`,4000)"><img src="https://dsde.innogamescdn.com/asset/4e165360/graphic/questionmark.png" style="width:13px;height:13px"></a>
+              </div>
+            </td>
+          </tr>
+
+          <tr>
+            <td>Cut at value (per res)</td>
+            <td>
+              <div style="display:flex;justify-content:flex-start;align-items:center;gap:6px;">
+                <input type="number" id="cut_at_value" placeholder="0" value="0" min="0" step="100" style="width:120px">
+                <a href="#" onclick="UI.InfoMessage(\`${message_info_resources}\`,4000)"><img src="https://dsde.innogamescdn.com/asset/4e165360/graphic/questionmark.png" style="width:13px;height:13px"></a>
+              </div>
+            </td>
+          </tr>
+
+          <tr id="tr_merchant_capacity" style="display:none">
+            <td>Merchant capacity</td>
+            <td>
+              <div style="display:flex;justify-content:flex-start;align-items:center;gap:6px;">
+                <input type="number" id="merchant_capacity" placeholder="1000" value="1000" min="1" step="1" style="width:120px">
+                <a href="#" onclick="UI.InfoMessage('Nur für DE/PT Server.',4000)"><img src="https://dsde.innogamescdn.com/asset/4e165360/graphic/questionmark.png" style="width:13px;height:13px"></a>
+              </div>
+            </td>
+          </tr>
+
+          <tr>
+            <td>Exclude newborn villages</td>
+            <td>
+              <div style="display:flex;justify-content:flex-start;align-items:center;gap:6px;">
+                <input type="checkbox" id="exclude_newborn">
+                <a href="#" onclick="UI.InfoMessage(\`${message_info_exclude}\`,4000)"><img src="https://dsde.innogamescdn.com/asset/4e165360/graphic/questionmark.png" style="width:13px;height:13px"></a>
+              </div>
+            </td>
+          </tr>
+
+          <tr>
+            <td>Avoid sending from attacked</td>
+            <td>
+              <div style="display:flex;justify-content:flex-start;align-items:center;gap:6px;">
+                <input type="checkbox" id="avoid_sending_attacked">
+                <a href="#" onclick="UI.InfoMessage(\`${message_info_avoidSending}\`,4000)"><img src="https://dsde.innogamescdn.com/asset/4e165360/graphic/questionmark.png" style="width:13px;height:13px"></a>
+              </div>
+            </td>
+          </tr>
+
+          <tr>
+            <td>Avoid receiving to attacked</td>
+            <td>
+              <div style="display:flex;justify-content:flex-start;align-items:center;gap:6px;">
+                <input type="checkbox" id="avoid_receiving_attacked">
+                <a href="#" onclick="UI.InfoMessage(\`${message_info_avoidReceving}\`,4000)"><img src="https://dsde.innogamescdn.com/asset/4e165360/graphic/questionmark.png" style="width:13px;height:13px"></a>
+              </div>
+            </td>
+          </tr>
+
+          <tr>
+            <td>Panel width (%)</td>
+            <td>
+              <div style="display:flex;justify-content:flex-start;align-items:center;gap:6px;">
+                <input type="number" id="widthInterface" placeholder="60" value="60" min="10" max="100" style="width:120px">
+                <a href="#" onclick="UI.InfoMessage(\`${message_info_width}\`,4000)"><img src="https://dsde.innogamescdn.com/asset/4e165360/graphic/questionmark.png" style="width:13px;height:13px"></a>
+              </div>
+            </td>
+          </tr>
+        </table>
+
+        <div style="margin:10px 0;">
+          <button id="rb_start" class="btn evt-confirm-btn btn-confirm-yes">Start</button>
         </div>
-        <div id="theme_settings"></div>
 
-        <div id="div_body" style="height: 600px; overflow-y: auto">
-            <center>
-                <table id="table_main"  class="scriptTable">
-                    <tr>
-                        <td>setting name</td>
-                        <td>setting value</td>
-                    </tr>
-                    <tr>
-                        <td>reserve merchants</td>
-                        <td>
-                            <div style="display:flex;justify-content: center; align-items: center;   ">
-                                <div><input type="number" id="nr_merchants_reserve" class="scriptInput" placeholder="15" value="0"></div>
-                                <div><a href="#" onclick="UI.InfoMessage('how many merchants do you want to keep home',4000)"><img src="https://dsen.innogamescdn.com/asset/dbeaf8db/graphic/questionmark.png" style="width: 13px; height: 13px"/></a></div>
-                            </div>
-                        </td>
-                    </tr> 
-                    <tr>
-                        <td>construction time[hours]</td>
-                        <td>
-                            <div style="display:flex;justify-content: center; align-items: center;">
-                                <div><input type="number" id="time_construction" class="scriptInput" placeholder="0" value="0"></div>
-                                <div><a href="#" onclick="UI.InfoMessage(\`${message_info_construction}\`,15000)"><img src="https://dsen.innogamescdn.com/asset/dbeaf8db/graphic/questionmark.png" style="width: 13px; height: 13px"/></a></div>
-                            </div>
-                        </td>
-                    </tr> 
-
-                    <tr>
-                        <td>average factor[0-1]</td>
-                        <td>
-                            <div style="display:flex;justify-content: center; align-items: center;">
-                                <div><input type="number" id="nr_average_factor" class="scriptInput" placeholder="1" value="1"></div>
-                                <div><a href="#" onclick="UI.InfoMessage(\`${message_info_factor}\`,20000)"><img src="https://dsen.innogamescdn.com/asset/dbeaf8db/graphic/questionmark.png" style="width: 13px; height: 13px"/></a></div>
-                            </div>
-                        </td>
-                    </tr>
-
-                    <tr>
-                        <td>number of clusters</td>
-                        <td>
-                            <div style="display:flex;justify-content: center; align-items: center;">
-                                <div><center><input type="number" id="nr_clusters" class="scriptInput" placeholder="1" value="1"></div>
-                                <div><a href="#" onclick="UI.InfoMessage(\`${message_info_cluster}\`,20000)"><img src="https://dsen.innogamescdn.com/asset/dbeaf8db/graphic/questionmark.png" style="width: 13px; height: 13px"/></a></div>
-                            </div>
-                        </td>
-                    </tr>
-                    <tr hidden id="tr_merchant_capacity">
-                        <td>merchant capacity</td>
-                        <td>
-                            <div style="display:flex;justify-content: center; align-items: center;">
-                                <div><input type="number" id="merchant_capacity" class="scriptInput" placeholder="1000" value='1000'></div>
-                                <div><a href="#" onclick="UI.InfoMessage('set merchant capacity to either 1000 or 1500',3000)"><img src="https://dsen.innogamescdn.com/asset/dbeaf8db/graphic/questionmark.png" style="width: 13px; height: 13px"/></a></div>
-                            </div>
-                        </td>
-                    </tr> 
-                    <tr>
-                        <td>max construction</td>
-                        <td>
-                            <div style="display:flex;justify-content: center; align-items: center;">
-                                <div><center><input type="checkbox" id="max_construction" /></div>
-                                <div><a href="#" onclick="UI.InfoMessage(\`${message_max_construction}\`,20000)"><img src="https://dsen.innogamescdn.com/asset/dbeaf8db/graphic/questionmark.png" style="width: 13px; height: 13px"/></a></div>
-                            </div>
-                        </td>
-                    </tr>
-                </table>
-            </center>
-
-            <center>
-                <input class="btn evt-confirm-btn btn-confirm-yes" type="button" onclick="balancingResources()" style="margin:10px" value="start">
-            </center>
-
-            <div id="div_tables" hidden>
-                <center><div id="table_stats" style="width:100%"></div></center><br>
-                <center><div id="table_view" style="height:500px;width:100%;overflow:auto"></div></center>
-            </div>
+        <div id="div_tables" hidden>
+          <div id="table_stats" style="width:100%"></div><br>
+          <div id="table_view" style="height:500px;width:100%;overflow:auto"></div>
         </div>
+      </div>
 
- 
-        <div class="scriptFooter">
-            <div style=" margin-top:5px;"><h5>made by Costache</h5></div>
-        </div>
-    </div>`
-    ////////////////////////////////////////add and remove window from page///////////////////////////////////////////
-// Ersetze die Error-Box durch das Interface
-    var $errorBox = $(".error_box:has(.content:contains('Ungültiger Modus'))");
-    if($errorBox.length){
-        $errorBox.html(html_info);
+      <div class="scriptFooter" style="margin-top:6px;">
+        <h5 style="margin:0;">made by Costache</h5>
+      </div>
+    </div>
+  `;
+
+  // --- mount into the second cell or fallback host ---
+  document.getElementById('rb_panel')?.remove();
+  if (contentCell) {
+    // Replace the current content when you're on ?mode=resource_balancer, else just append at top
+    const url = new URL(location.href, location.origin);
+    const mode = url.searchParams.get('mode');
+    if (mode === 'resource_balancer') {
+      contentCell.innerHTML = html;
     } else {
-        // Fallback: falls nicht gefunden, Interface irgendwo sichtbar einfügen
-        $("#contentContainer").eq(0).prepend(html_info);
+      contentCell.insertAdjacentHTML('afterbegin', html);
     }
+  } else {
+    // graceful fallback
+    const host = document.querySelector('#content_value > table:nth-of-type(2) td[valign="top"]:last-of-type');
 
+    host.insertAdjacentHTML('afterbegin', html);
+  }
 
-    
-    if(game_data.device != "desktop"){
-        $("#div_body").css("height","500px")
+  // --- Mobile height adjustment (keep native scroll feeling) ---
+  if (typeof game_data !== 'undefined' && game_data.device !== "desktop") {
+    $("#div_body").css("max-height", "500px").css("overflow-y", "auto");
+  }
+
+  // --- Show merchant capacity only on DE/PT servers ---
+  try {
+    const twServers = ["pt_PT","de_DE"];
+    if (typeof game_data !== 'undefined' && twServers.includes(game_data.locale)) {
+      $("#tr_merchant_capacity").show();
     }
+  } catch(e){}
 
+  // --- Settings: Load & Save (scoped to #rb_panel) ---
+  const lsKey = (typeof game_data !== 'undefined' ? game_data.world : window.location.host) + "settings_resources_balancer2";
+  const saved = localStorage.getItem(lsKey);
+  if (saved) {
+    const list_input = JSON.parse(saved);
+    $('#rb_panel input[type=number], #rb_panel input[type=checkbox]').each(function (index) {
+      if (typeof list_input[index] === 'boolean') this.checked = list_input[index];
+      else this.value = list_input[index];
+    });
+  }
+  $("#rb_panel input[type=number], #rb_panel input[type=checkbox]").on("click input change", () => {
+    const list_input = [];
+    $('#rb_panel input[type=number]').each(function(){ list_input.push(this.value); });
+    $('#rb_panel input[type=checkbox]').each(function(){ list_input.push(this.checked); });
+    const data = JSON.stringify(list_input);
+    if (data !== localStorage.getItem(lsKey)) localStorage.setItem(lsKey, data);
+  });
 
+  // --- Bind Start button without inline onclick; resolve function safely ---
+  const btn = document.getElementById('rb_start');
+  if (btn) {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      let fn = null;
+      try {
+        if (typeof balancingResources === 'function') fn = balancingResources;
+        else if (typeof window !== 'undefined' && typeof window.balancingResources === 'function') fn = window.balancingResources;
+        else if (typeof unsafeWindow !== 'undefined' && typeof unsafeWindow.balancingResources === 'function') fn = unsafeWindow.balancingResources;
+      } catch(_) {}
 
-    $("#div_container").css("position","fixed");
-    $("#div_container").draggable()
+      if (fn) {
+        try { fn(); }
+        catch(err) { console.error(err); UI.ErrorMessage('Error running balancer: ' + err.message, 6000); }
+      } else {
+        UI.ErrorMessage('balancingResources() ist nicht verfügbar. Bitte sicherstellen, dass die Kernfunktion geladen ist.', 6000);
+        console.warn('balancingResources not found on scope/window/unsafeWindow.');
+      }
+    });
+  }
 
-    
-
-
-    
-    let twServers = [
-        "pt_PT", 
-        "de_DE",
-    ]
-    if(twServers.includes(game_data.locale)){
-        $("#tr_merchant_capacity").show()
-    }
-
-    $("#div_minimize").on("click",()=>{
-        let currentWidthPercentage=Math.ceil($('#div_container').width() / $('body').width() * 100);
-        if(currentWidthPercentage >=widthInterface ){
-            $('#div_container').css({'width' : '10%'});
-            $('#div_body').hide();
-        }
-        else{
-            $('#div_container').css({'width' : `${widthInterface}%`});
-            $('#div_body').show();
-        }
-    })
-
-
-
-    //initialization settings
-    if(localStorage.getItem(game_data.world+"settings_resources_balancer2")!=null ){
-        //initialize input numbers
-        let list_input=JSON.parse(localStorage.getItem(game_data.world+"settings_resources_balancer2"))
-        $('#div_container input[type=number], #div_container input[type=checkbox]').each(function (index,elem) {
-            if(typeof(list_input[index]) == 'boolean'){
-                this.checked=list_input[index]
-            }
-            else{
-                this.value=list_input[index]
-            }
-        });
-    }
-
-
-    //save settings
-    $("#div_container input[type=number], #div_container input[type=checkbox]").on("click input change",()=>{
-        console.log("save settings")
-        let list_input=[]
-
-        //save inputs
-        $('#div_container input[type=number]').each(function () {
-            var value=this.value
-            // console.log(value)
-            list_input.push(value)
-        });
-        //save checkbox
-        $('#div_container input[type=checkbox]').each(function () {
-            var value=this.checked
-            list_input.push(value)
-        });
-    
-      
-        let data=JSON.stringify(list_input)
-        let data_localStorage=localStorage.getItem(game_data.world+"settings_resources_balancer2")
-        // console.log(data)
-        // console.log(data_localStorage)
-        if(data!=data_localStorage){
-            localStorage.setItem(game_data.world+"settings_resources_balancer2",data)
-        }
-    })
-    
+  // Optional: expose a small proxy for other scripts
+  try { window.__runResBalancer = () => document.getElementById('rb_start')?.click(); } catch(e){}
 }
+
+
 
 
 
@@ -425,8 +481,11 @@ function changeTheme(){
     if(localStorage.getItem(localStorageThemeName) != undefined){
         mapTheme = new Map(JSON.parse(localStorage.getItem(localStorageThemeName)))
         let currentTheme=mapTheme.get("currentTheme")
-        document.querySelector('#select_theme').value=currentTheme
+        if (document.querySelector('#select_theme')) {
+            document.querySelector('#select_theme').value = currentTheme;
+        }
     }
+
 
     
 }
@@ -491,11 +550,11 @@ function initializationTheme(){
 async function balancingResources(){
 
     let time_construction_total=parseFloat(document.getElementById("time_construction").value)
-    let averageFactor=parseFloat(document.getElementById("nr_average_factor").value)
+    let averageFactor=parseFloat(document.getElementById("resources_factor").value)
     let reserveMerchants=parseInt(document.getElementById("nr_merchants_reserve").value)
     let merchantCapacity=parseInt(document.getElementById("merchant_capacity").value)
     let nrClusters=parseInt(document.getElementById("nr_clusters").value)
-    let maxConstruction=document.getElementById("max_construction").checked
+    let maxConstruction=document.getElementById("maximize_construction").checked
 
     reserveMerchants=(Number.isNaN(reserveMerchants)==true || reserveMerchants<0 )?0:reserveMerchants //by default are 0 merchants as reserver
     nrClusters=(Number.isNaN(nrClusters)==true || nrClusters<1 )?1:nrClusters //by default is one cluster
