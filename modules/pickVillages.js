@@ -7,6 +7,7 @@ win.showWithCounter = false;
 
 win.breakAfter = 5;
 win.activationCharCode = 'b';
+
 (function() {
     var win = typeof unsafeWindow != 'undefined' ? unsafeWindow : window;
     win.ScriptAPI.register('90-Select Villages', true, 'Phisa, suilenroc', 'support-nur-im-forum@die-staemme.de');
@@ -27,6 +28,9 @@ win.activationCharCode = 'b';
         villagesId: [],
         villagesToInsert: [],
         allyRelations: [],
+        
+        // NEW: toggle to select all villages of the clicked player's owner
+        selectAllByPlayer: false,
  
         lang: {
             de: {
@@ -35,7 +39,9 @@ win.activationCharCode = 'b';
                     insertOptions: "Auswahl/Einf\u00FCgen",
                     enableShowWithCoords: "Mit BBCodes anzeigen",
                     enableShowWithCounter: "Mit Z\u00E4hler anzeigen",
-                    enableFilter: "Nach Diplomatie filtern"
+                    enableFilter: "Nach Diplomatie filtern",
+                    // NEW: label for the new checkbox
+                    enableSelectAllByPlayer: "Alle D\u00F6rfer des Spielers ausw\u00E4hlen"
                 }
             }
         },
@@ -53,7 +59,6 @@ win.activationCharCode = 'b';
             this.allyRelations[game_data.player.ally] = "partner";
  
             this.showUi();
-            
         },
  
         spawnSector: function(data, sector) {
@@ -111,6 +116,10 @@ win.activationCharCode = 'b';
             +     '<input type="checkbox" checked="true" id="bbcode" /> ' + this.lang[this.currentLang].UI.enableShowWithCoords + '<br />'
             +     '<input type="checkbox" checked="true" id="zaehlen" /> ' + this.lang[this.currentLang].UI.enableShowWithCounter + '<br />'
             +   '</div>'
+            // NEW: the new checkbox row
+            +   '<div style="text-align:center; margin-top:6px">'
+            +     '<input type="checkbox" id="select_all_player" /> ' + this.lang[this.currentLang].UI.enableSelectAllByPlayer
+            +   '</div>'
             +   '<textarea id="output" cols="35" rows="20" readonly style="width:307px!important; height:332px!important; text-align:center;"></textarea>'
             +   '<br/>'
             +   '<div style="text-align:center"><button id="copy" class="btn">Kopieren</button></div>'
@@ -127,10 +136,12 @@ win.activationCharCode = 'b';
             var chkbxBBcode = $('#bbcode');
             var chkbxcounter = $('#zaehlen');
             var chkbxFilter = $('#filter');
+            var chkbxAllPlayer = $('#select_all_player'); // NEW
 
             chkbxBBcode.prop('checked', this.showWithCoords);
             chkbxcounter.prop('checked', this.showWithCounter);
             chkbxFilter.prop('checked', this.filter);
+            chkbxAllPlayer.prop('checked', this.selectAllByPlayer); // NEW
 
             chkbxBBcode.on('change', function() {
                 win.DSSelectVillages.showWithCoords = this.checked;
@@ -143,6 +154,10 @@ win.activationCharCode = 'b';
             chkbxFilter.on('change', function() {
                 win.DSSelectVillages.filter = this.checked;
                 win.DSSelectVillages.outputCoords();
+            });
+            // NEW: wire the select-all-by-player toggle
+            chkbxAllPlayer.on('change', function() {
+                win.DSSelectVillages.selectAllByPlayer = this.checked;
             });
 
             $('#copy').on('click', function() {
@@ -164,6 +179,38 @@ win.activationCharCode = 'b';
             });
         },
 
+        // NEW: helper to add a single village if eligible (reuses your filtering & overlay)
+        addVillageIfEligible: function(x, y, update) {
+            var coord = x + "|" + y;
+            if (this.villages.indexOf(coord) !== -1) return;
+
+            var village = win.TWMap.villages[(x) * 1000 + y];
+            if (!village) return;
+
+            var allyRelation = this.allyRelations[village.ally_id];
+            if (this.filter && (allyRelation == "nap" || allyRelation == "partner")) return;
+
+            this.villages.push(coord);
+            this.villagesId.push(village.id);
+            this.markVillageAsSelected(village.id);
+            if (update) win.TWMap.reload();
+        },
+
+        // NEW: bulk add all villages by the same owner as the clicked village
+        bulkAddByOwner: function(ownerId) {
+            for (var key in win.TWMap.villages) {
+                if (!win.TWMap.villages.hasOwnProperty(key)) continue;
+                var v = win.TWMap.villages[key];
+                if (!v || v.owner !== ownerId) continue;
+
+                var k = parseInt(key, 10);
+                var x = Math.floor(k / 1000);
+                var y = k % 1000;
+
+                this.addVillageIfEligible(x, y, false);
+            }
+            this.outputCoords();
+        },
  
         outputCoords: function() {
             var coordsOutput = "";
@@ -191,7 +238,7 @@ win.activationCharCode = 'b';
         insertNextVillages: function() {
             function waitForVillage(x, y, n) {
                 var e = Date.now();
-                ! function o() {
+                !function o() {
                     win.TWMap.villages[(x) * 1000 + y] ? win.DSSelectVillages.insertNextVillages() : setTimeout(function() {
                         100 * n && Date.now() - e > 100 * n ? win.console.log(x + '|' + y) : o()
                     }, 100)
@@ -234,7 +281,16 @@ win.activationCharCode = 'b';
             if (!village) {
                 return;
             }
+
             if (index === -1) {
+                // NEW: if toggle is on, select all villages of this owner in one go
+                if (this.selectAllByPlayer) {
+                    this.bulkAddByOwner(village.owner);
+                    if (update) win.TWMap.reload();
+                    return this.outputCoords();
+                }
+
+                // original single-add path (with diplomacy filter)
                 var allyRelation = this.allyRelations[village.ally_id];
                 if (this.filter && (allyRelation == "nap" || allyRelation == "partner")) {
                     return;
@@ -246,6 +302,7 @@ win.activationCharCode = 'b';
                     win.TWMap.reload();
                 }
             } else {
+                // original toggle-off of the single clicked village
                 this.villages[index] = null;
                 var indexId = this.villagesId.indexOf(village.id);
                 this.villagesId[indexId] = null;
@@ -262,6 +319,7 @@ win.activationCharCode = 'b';
  
         oldClickFunction: null
     };
+
     (function() {
         $(document).on("keypress", function(e) {
             if (String.fromCharCode(e.which) == win.DSSelectVillages.activationCharCode) {
