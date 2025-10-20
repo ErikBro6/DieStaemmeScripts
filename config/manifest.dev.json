@@ -30,6 +30,9 @@
     ],
     "info_player": "/modules/playerInfoTools.js",
     "info_village": "/modules/singleVillageSnipe.js",
-    "main": "/modules/softBuildQueue.js"
+    "main": [
+      "/config/assetsBase.js",
+      "/modules/softBuildQueue.js"
+    ]
   }
 }

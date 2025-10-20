@@ -118,6 +118,12 @@
       return urls;
     }
 
+
+    if (ctx.screen === "main") {
+      return toArray(MODULES.main); // keep your assetsBase first if you use it
+    }
+
+
     return toArray(MODULES[ctx.screen]);
   }
 
