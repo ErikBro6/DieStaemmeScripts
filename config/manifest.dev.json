@@ -29,6 +29,7 @@
       "/modules/dsUltimateAutoSender.js"
     ],
     "info_player": "/modules/playerInfoTools.js",
-    "info_village": "/modules/singleVillageSnipe.js"
+    "info_village": "/modules/singleVillageSnipe.js",
+    "main": "/modules/softBuildQueue.js"
   }
 }

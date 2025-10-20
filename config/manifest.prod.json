@@ -28,6 +28,7 @@
       "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/dsUltimateAutoSender.js"
     ],
     "info_player": "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/playerInfoTools.js",
-    "info_village": "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/singleVillageSnipe.js"
+    "info_village": "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/singleVillageSnipe.js",
+    "main": "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/softBuildQueue.js"
   }
 }
