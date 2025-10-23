@@ -114,24 +114,35 @@
     }
 
     function tryReturn() {
-        const timeout = localStorage.getItem("recruitDelaySeconds")*1000;
-        const backLink = document.querySelector('a[href*="screen=train"][href*="mode=mass"][href*="page=0"]');
-        if (backLink) {
-           setTimeout(() => {
-             backLink.click();
-           }, timeout); // 10 seconds = 10000 ms
-        } else {
+    const stored = parseInt(localStorage.getItem("recruitDelaySeconds"), 10);
+    const fallback = (Number.isFinite(stored) ? stored : 5) * 1000;
 
-            setTimeout(tryReturn, 100);
-        }
+    const backLink = document.querySelector('a[href*="screen=train"][href*="mode=mass"][href*="page=0"]');
+
+    if (backLink) {
+        setTimeout(() => {
+        // FF-safe hard navigation; avoids click() being ignored
+        location.assign(backLink.href);
+        }, fallback);
+    } else {
+        // Keep looking a bit, but don't spin too hard
+        setTimeout(tryReturn, 200);
+    }
     }
 
-    window.addEventListener('load', () => {
-        createControlPanel();
-        if (recruitingEnabled) {
-            startRecruiting();
-            tryReturn();
-        }
-    });
+
+function boot() {
+  createControlPanel();
+  if (recruitingEnabled) {
+    startRecruiting();
+    tryReturn();
+  }
+}
+if (document.readyState === 'complete' || document.readyState === 'interactive') {
+  boot();
+} else {
+  window.addEventListener('DOMContentLoaded', boot, { once: true });
+}
+
 
 })();

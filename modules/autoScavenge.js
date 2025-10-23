@@ -60,6 +60,18 @@ function getMinCountdownMs() {
   if (ms <= 0 || ms > MAX_REASONABLE_MS) return null;
   return ms;
 }
+// Robust reload that works on Firefox/containers too
+function forceReload(cacheBust = true) {
+  try {
+    const url = new URL(location.href);
+    if (cacheBust) url.searchParams.set('_tmr', Date.now());
+    // replace() avoids polluting history
+    location.replace(url.toString());
+  } catch {
+    // Fallback
+    location.href = location.href;
+  }
+}
 
 // Plant den nächsten Reload neu
 function scheduleNextReload() {
@@ -70,13 +82,13 @@ function scheduleNextReload() {
     // Falls inzwischen neue Countdowns hinzugekommen sind, prüfe sofort nochmal
     // (verhindert verfrühten Reload, wenn DOM sich gerade geändert hat)
     const recheck = getMinCountdownMs();
-    if (recheck != null && recheck > 1500) {
+    if (recheck != null && recheck > 2500) {
       // Noch nicht ganz fertig, neu planen
       scheduleNextReload();
       return;
     }
     // Alles gut: neu laden
-    location.reload();
+    forceReload(true);
   }, ms);
 }
 
