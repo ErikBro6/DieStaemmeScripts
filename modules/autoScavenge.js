@@ -33,6 +33,112 @@ api.register('470-Raubzug schicken', true, 'osse, TheHebel97', 'support-nur-im-f
 
   setTimeout(function () {
     setupUI();
+// ---- Auto-Refresh nach Scavenge-Ende ---------------------------------------
+const REFRESH_JITTER_MS = 1200;      // ~1.2s nach 00:00:00 neu laden
+const MAX_REASONABLE_MS = 8 * 3600_000; // Safety: >8h ignorieren
+let refreshTmo = null;
+
+// "H:MM:SS" -> Sekunden
+function parseHMS(t) {
+  if (!t) return null;
+  const m = String(t).trim().match(/^(\d+):(\d{2}):(\d{2})$/);
+  if (!m) return null;
+  const h = parseInt(m[1], 10), mi = parseInt(m[2], 10), s = parseInt(m[3], 10);
+  return (h * 3600) + (mi * 60) + s;
+}
+
+// Liefert die kleinste Restzeit aller aktiven Countdowns in ms (oder null)
+function getMinCountdownMs() {
+  let minSec = null;
+  $('.scavenge-option .active-view .return-countdown').each(function () {
+    const sec = parseHMS($(this).text());
+    if (sec == null) return;
+    if (minSec == null || sec < minSec) minSec = sec;
+  });
+  if (minSec == null) return null;
+  const ms = (minSec * 1000) + REFRESH_JITTER_MS;
+  if (ms <= 0 || ms > MAX_REASONABLE_MS) return null;
+  return ms;
+}
+
+// Plant den nächsten Reload neu
+function scheduleNextReload() {
+  if (refreshTmo) { clearTimeout(refreshTmo); refreshTmo = null; }
+  const ms = getMinCountdownMs();
+  if (ms == null) return;           // nichts aktiv -> kein Reload nötig
+  refreshTmo = setTimeout(() => {
+    // Falls inzwischen neue Countdowns hinzugekommen sind, prüfe sofort nochmal
+    // (verhindert verfrühten Reload, wenn DOM sich gerade geändert hat)
+    const recheck = getMinCountdownMs();
+    if (recheck != null && recheck > 1500) {
+      // Noch nicht ganz fertig, neu planen
+      scheduleNextReload();
+      return;
+    }
+    // Alles gut: neu laden
+    location.reload();
+  }, ms);
+}
+
+// Debounce-Helfer für Observer
+function debounce(fn, wait) {
+  let t = null;
+  return function () {
+    if (t) clearTimeout(t);
+    t = setTimeout(fn, wait);
+  };
+}
+
+// Beobachtet Änderungen an Countdowns / Status-Wechseln
+function installScavengeObserver() {
+  const host = document.querySelector('.options-container');
+  if (!host) return;
+  const reschedule = debounce(scheduleNextReload, 200);
+
+  const mo = new MutationObserver((mutList) => {
+    // Nur reagieren, wenn Text/Nodes im relevanten Bereich sich ändern
+    for (const m of mutList) {
+      if (m.type === 'characterData') { reschedule(); return; }
+      if (m.type === 'childList') {
+        // Neue/entfernte .active-view / .return-countdown / Buttons
+        if ([...m.addedNodes, ...m.removedNodes].some(n => {
+          return (n.nodeType === 1) && (
+            n.matches?.('.active-view, .return-countdown, .free_send_button, .premium_send_button') ||
+            n.querySelector?.('.active-view, .return-countdown, .free_send_button, .premium_send_button')
+          );
+        })) { reschedule(); return; }
+      }
+      if (m.type === 'attributes' && (m.target?.classList?.contains('return-countdown'))) {
+        reschedule(); return;
+      }
+    }
+  });
+
+  mo.observe(host, {
+    subtree: true,
+    childList: true,
+    characterData: true,
+    attributes: true,
+    attributeFilter: ['class'] // schlank halten
+  });
+
+  // Initial planen
+  scheduleNextReload();
+
+  // Fail-safe: alle 30s neu berechnen (falls Observer Events verpassen sollte)
+  setInterval(scheduleNextReload, 30_000);
+}
+
+// Initialisierung sofort nach UI-Aufbau
+installScavengeObserver();
+
+// Optional: nach Auto-Send neu planen (falls Sie unmittelbar Buttons klicken)
+const _oldRunAutoOnce = runAutoOnce;
+runAutoOnce = function () {
+  _oldRunAutoOnce();
+  // nach Klicks/Dispatch leicht verzögert neu planen
+  setTimeout(scheduleNextReload, 1500);
+};
 
     let storage = localStorage;
     getLocalStorage();
