@@ -8,7 +8,8 @@
       "/ui/datePicker.js",
       "/modules/confirmEnhancer.js",
       "/modules/autoSender.js",
-      "/modules/massSupporter.js"
+      "/modules/massSupporter.js",
+      "/modules/autoScavenge.js"
     ],
     "map": [
       "/config/assetsBase.js",

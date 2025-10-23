@@ -1,270 +1,368 @@
-// modules/softQueue.js
+// ==UserScript==
+// @name         DSU Soft Build — Safe (Top Soft Queue + Exact Promote)
+// @namespace    dsu
+// @match        *://*.die-staemme.de/game.php*screen=main*
+// @run-at       document-end
+// ==/UserScript==
+
 (function () {
   'use strict';
-  if (!/[\?&]screen=main\b/.test(location.search)) return;
 
-  const $ = window.jQuery || window.$;
-  if (!$) return;
+  //temporarily deactivated
+  return;
+  // ---------- DEBUG ----------
+  var DEBUG = true;
+  var PFX = '[DSU-SoftBuild]';
+  function log(){ if (DEBUG) try { console.log.apply(console, [PFX].concat([].slice.call(arguments))); } catch(_){ } }
+  function warn(){ if (DEBUG) try { console.warn.apply(console, [PFX].concat([].slice.call(arguments))); } catch(_){ } }
 
-  // --------- FAST BOOT GUARD ----------
-  function onReady(fn, tries = 120) {
-    const ok = () => window.BuildingMain && BuildingMain.buildings && $('#build_queue #buildqueue').length;
-    if (ok()) return void fn();
-    const t = setInterval(() => { if (ok() || --tries <= 0) { clearInterval(t); fn(); } }, 50);
-  }
+  // ---------- ENV ----------
+  var wrap = document.querySelector('#building_wrapper');
+  if (!wrap) { return; }
+  function getQueueBody() { return document.querySelector('#buildqueue'); }
 
-  // --------- CONFIG ----------
-  const GREY_BG = '#eef0f1';
-  const GREY_TXT = '#6c6c6c';
-  const TICK_MIN_MS = 5000;      // low, only as a fallback; most triggers are event/observer based
-  const STORAGE_KEY = (vid => `DSU:softQueue:v${vid}`)((window.game_data && game_data.village && game_data.village.id) || (location.search.match(/village=(\d+)/) || [])[1] || '0');
-  const SOFT_ROW = 'dsu-soft-row';
-  const SOFT_PROG = 'dsu-soft-prog';
-  const ADD_BTN = 'dsu-soft-add';
-
-  // --------- STATE I/O ----------
-  const loadQ = () => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch { return []; } };
-  const saveQ = q => localStorage.setItem(STORAGE_KEY, JSON.stringify(q || []));
-  const B = () => (window.BuildingMain && BuildingMain.buildings) || {};
-
-  // --------- HELPERS ----------
-  const curLv = id => parseInt(B()?.[id]?.level ?? 0, 10) || 0;
-
-  function realQueuedCount(id) {
-    const $rows = $('#build_queue #buildqueue tr[class*="buildorder_"]');
-    let n = 0;
-    $rows.each(function () {
-      const cls = this.className || '';
-      if (cls.includes(SOFT_ROW)) return;           // ignore our own
-      const m = cls.match(/buildorder_([a-z_]+)/i);
-      if (m && m[1] === id) n++;
-    });
-    return n;
-  }
-
-  function computeTargets(queue) {
-    const softAdds = Object.create(null);
-    return queue.map(item => {
-      const id = item.id;
-      softAdds[id] = (softAdds[id] || 0) + 1;
-      const target = curLv(id) + realQueuedCount(id) + softAdds[id];
-      return { ...item, targetLevel: target };
-    });
-  }
-
-  function buildImgUrl(id, targetLevel) {
+  // ---------- STORAGE ----------
+  function getParam(name){ try { return new URL(location.href).searchParams.get(name); } catch(_){ return null; } }
+  var VILLAGE_ID = getParam('village') || 'global';
+  function KEY(v){ return 'dsu_soft_queue_' + v; }
+  function load(){
     try {
-      const b = B()[id];
-      const levels = b.image_levels || [5, 15];
-      const idx = targetLevel >= (levels[1] ?? 9e9) ? 2 : (targetLevel >= (levels[0] ?? 5) ? 2 : 1);
-      return `https://dsde.innogamescdn.com/asset/28bd5527/graphic/buildings/mid/${id}${idx}.webp`;
-    } catch { return `https://dsde.innogamescdn.com/asset/28bd5527/graphic/buildings/main.png`; }
+      var arr = JSON.parse(localStorage.getItem(KEY(VILLAGE_ID)) || '[]');
+      return Array.isArray(arr) ? arr : [];
+    } catch(_){ return []; }
+  }
+  function save(arr){ try { localStorage.setItem(KEY(VILLAGE_ID), JSON.stringify(arr)); } catch(_){ } }
+  function sanitizeQueue(arr){
+    arr = arr || load();
+    var out = [];
+    for (var i=0;i<arr.length;i++){
+      var j = arr[i];
+      if (!j || !j.building) continue;
+      if (!(typeof j.levelNext === 'number' && isFinite(j.levelNext))) continue;
+      // normalize snap
+      j.snap = j.snap || {};
+      if (!j.snap.name) j.snap.name = j.building;
+      if (!j.snap.imgSrc) j.snap.imgSrc = guessImg(j.building);
+      j.snap.secs = (Number(j.snap.secs) > 0) ? Number(j.snap.secs) : 60;
+      out.push(j);
+      if (out.length >= 30) break; // hard cap for safety
+    }
+    return out;
   }
 
-  const fmtDur = s => {
-    if (!s || s <= 0) return '—';
-    const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = s%60;
-    return h ? `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}` : `${m}:${String(sec).padStart(2,'0')}`;
+  // ---------- FALLBACKS ----------
+  var FALLBACK = {
+    main:{name:'Hauptgebäude',img:'main1.webp'}, barracks:{name:'Kaserne',img:'barracks1.webp'},
+    stable:{name:'Stall',img:'stable1.webp'}, garage:{name:'Werkstatt',img:'garage1.webp'},
+    smith:{name:'Schmiede',img:'smith1.webp'}, market:{name:'Marktplatz',img:'market1.webp'},
+    storage:{name:'Speicher',img:'storage1.webp'}, farm:{name:'Bauernhof',img:'farm1.webp'},
+    wall:{name:'Wall',img:'wall1.webp'}, timber_camp:{name:'Holzfäller',img:'wood1.webp'},
+    clay_pit:{name:'Lehmgrube',img:'stone1.webp'}, iron_mine:{name:'Eisenmine',img:'iron1.webp'},
+    rally_point:{name:'Versammlungsplatz',img:'place1.webp'}, statue:{name:'Statue',img:'statue1.webp'},
+    hiding_place:{name:'Versteck',img:'hide1.webp'}
   };
+  var CDN_BASE = 'https://dsde.innogamescdn.com/asset/4b78fa77/graphic/buildings/mid/';
+  function guessImg(b){ var f = FALLBACK[b]; return CDN_BASE + (f ? f.img : (b + '1.webp')); }
 
-  // rough per-level time estimate using factor; good enough for display
-  function estNextTime(id, targetLevel) {
-    const b = B()[id]; if (!b) return null;
-    const base = +b.build_time || 0;
-    const factor = +b.build_time_factor || 1;
-    const nextIdx = targetLevel - (parseInt(b.level,10)||0);
-    return Math.round(base * Math.max(1, Math.pow(factor, Math.max(0, nextIdx - 1))));
+  // ---------- UTILS ----------
+  function now(){ return (Date.now()/1000)|0; }
+  function fmtHMS(secs){
+    secs = Math.max(0, secs|0);
+    var h = (secs/3600)|0, m = ((secs%3600)/60)|0, s = secs%60;
+    return (h? h + ':' : '') + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+  }
+  function fmtTodayTime(unix){
+    var d = new Date(unix*1000);
+    return 'heute um ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0') + ':' + String(d.getSeconds()).padStart(2,'0');
+  }
+  function isVisible(el){
+    if (!el) return false;
+    if (el.offsetParent === null) return false;
+    var cs = getComputedStyle(el);
+    return cs && cs.display !== 'none' && cs.visibility !== 'hidden' && cs.opacity !== '0';
   }
 
-  // --------- UI: "+ Soft" per building row (no prompt; +1) ----------
-  function injectAddButtons() {
-    $('#buildings tr[id^="main_buildrow_"]').each(function () {
-      const id = this.id.replace('main_buildrow_', '');
-      const $opts = $(this).find('.build_options');
-      if (!$opts.length) return;
-      if ($opts.find(`.${ADD_BTN}[data-building="${id}"]`).length) return;
-
-      const $btn = $(`<a href="#" class="btn ${ADD_BTN}" data-building="${id}" title="Soft-Queue: +1">+ Soft</a>`).css({ marginLeft: 6 });
-      $btn.on('click', e => { e.preventDefault(); const q = loadQ(); q.push({ id, at: Date.now() }); saveQ(q); renderInline(); scheduleTickSoon(); });
-      const $anchor = $opts.find('.inactive.center');
-      $anchor.length ? $anchor.after($btn) : $opts.append($btn);
-    });
-  }
-
-  // --------- RENDER: inside normal queue ----------
-  function clearSoftRows() {
-    $('#build_queue #buildqueue').find(`tr.${SOFT_ROW}, tr.${SOFT_PROG}`).remove();
-  }
-
-  function renderInline() {
-    const $tbody = $('#build_queue #buildqueue'); if (!$tbody.length) return;
-    clearSoftRows();
-
-    const q = loadQ();
-    if (!q.length) return;
-
-    const enriched = computeTargets(q);
-    enriched.forEach((item, idx) => {
-      const id = item.id;
-      const b = B()[id] || {};
-      const name = b.name || id;
-      const lvl = item.targetLevel;
-      const img = buildImgUrl(id, lvl);
-      const dur = fmtDur(estNextTime(id, lvl));
-
-      const tr1 = document.createElement('tr');
-      tr1.className = `lit nodrag buildorder_${id} ${SOFT_ROW}`;
-      Object.assign(tr1.style, { background: GREY_BG, color: GREY_TXT });
-
-      tr1.innerHTML = `
-        <td class="lit-item">
-          <img src="${img}" class="bmain_list_img" data-title="${name}">
-          ${name}<br>Stufe ${lvl}
-        </td>
-        <td class="nowrap lit-item"><span>${dur}</span></td>
-        <td class="lit-item"></td>
-        <td class="lit-item">—</td>
-        <td class="lit-item">
-          <a href="#" class="btn btn-cancel dsu-soft-cancel" data-i="${idx}">Abbrechen</a>
-          <a href="#" class="btn dsu-soft-up" data-i="${idx}" style="margin-left:6px">↑</a>
-          <a href="#" class="btn dsu-soft-dn" data-i="${idx}" style="margin-left:2px">↓</a>
-        </td>
-      `;
-
-      const tr2 = document.createElement('tr');
-      tr2.className = `lit ${SOFT_PROG}`;
-      tr2.innerHTML = `
-        <td colspan="5" style="padding:0;background:${GREY_BG}">
-          <div class="order-progress">
-            <div class="anim" style="width: 10%; background-color: #bdbdbd;"></div>
-          </div>
-        </td>
-      `;
-
-      $tbody.append(tr1);
-      $tbody.append(tr2);
-    });
-
-    // bind handlers (cheap)
-    $('#build_queue').off('click.dsu').on('click.dsu', 'a.dsu-soft-cancel', function (e) {
-      e.preventDefault();
-      const i = +this.dataset.i;
-      const q = loadQ(); q.splice(i,1); saveQ(q); renderInline();
-    }).on('click.dsu', 'a.dsu-soft-up', function (e) {
-      e.preventDefault();
-      const i = +this.dataset.i; const q = loadQ(); if (i>0){ const x=q[i]; q.splice(i,1); q.splice(i-1,0,x); saveQ(q); renderInline(); }
-    }).on('click.dsu', 'a.dsu-soft-dn', function (e) {
-      e.preventDefault();
-      const i = +this.dataset.i; const q = loadQ(); if (i<q.length-1){ const x=q[i]; q.splice(i,1); q.splice(i+1,0,x); saveQ(q); renderInline(); }
-    });
-  }
-
-  // --------- ENGINE (build when possible) ----------
-  let tickTimeout = null;
-
-  function scheduleTickAtFinish() {
-    const $spans = $('#build_queue [data-endtime]');
-    if (!$spans.length) return;
-    const next = Math.min(...$spans.map((_, s) => +s.getAttribute('data-endtime') || 0).get());
-    const delay = Math.max(0, (next - Math.floor(Date.now()/1000) + 1) * 1000);
-    if (tickTimeout) clearTimeout(tickTimeout);
-    tickTimeout = setTimeout(tick, delay);
-  }
-
-  function scheduleTickSoon() {
-    if (tickTimeout) return; // one pending is enough
-    tickTimeout = setTimeout(() => { tickTimeout = null; tick(); }, 400);
-  }
-
-  function queueFull() {
-    // server-side authoritative count is exposed as BuildingMain.order_count
-    return (window.BuildingMain?.order_count ?? 0) >= 2; // premium extends this; order_count reflects it automatically
-  }
-
-  async function tryBuildHead() {
-    const q = loadQ(); if (!q.length) return false;
-    if (queueFull()) return false;
-
-    const head = q[0];
-    const b = B()[head.id];
-    if (!b) return false;
-
-    // rely on server truth; client hint:
-    // if (!b.can_build || b.error) keep trying later (resources/prereqs)
-    const link = window.BuildingMain?.upgrade_building_link;
-    if (!link) return false;
-
-    try {
-      // The game expects { building: id }
-      const resp = await $.post(link, { building: head.id });
-      // If the server accepted, remove the head and refresh inline view
-      if (resp && (resp.success !== false)) {
-        const q2 = loadQ(); q2.shift(); saveQ(q2);
-        renderInline();
-        // The page often updates queue automatically via returned scripts; still, re-scan images/rows:
-        setTimeout(() => {
-          // After backend accepts, ds updates order_count; re-render to show new target levels
-          injectAddButtons(); renderInline(); scheduleTickAtFinish();
-        }, 150);
-        return true;
+  // Try to extract a snapshot next to a real button
+  function snapshotFromDom(btn, building){
+    var row = btn.closest('tr') || document.querySelector('#main_buildrow_' + building);
+    var name = building;
+    if (row){
+      var n1 = row.querySelector('.bmain_name');
+      if (n1 && n1.textContent) name = n1.textContent.trim();
+      else {
+        var n2 = row.querySelector('strong');
+        if (n2 && n2.textContent) name = n2.textContent.trim();
       }
-    } catch (e) {
-      // not enough resources / unmet prereqs – keep for later
     }
-    return false;
-  }
+    if (FALLBACK[building] && (!name || name === building)) name = FALLBACK[building].name;
 
-  async function tick() {
-    tickTimeout = null;
-    injectAddButtons(); // cheap and idempotent
-    renderInline();
+    var imgSrc = (row && row.querySelector('img.bmain_list_img') && row.querySelector('img.bmain_list_img').getAttribute('src')) || guessImg(building);
 
-    if (!queueFull()) {
-      await tryBuildHead();
-    }
-    // schedule smart next wake
-    scheduleTickAtFinish();
-    // also keep a low-frequency fallback
-    setTimeout(() => !tickTimeout && (tickTimeout = setTimeout(() => { tickTimeout = null; tick(); }, TICK_MIN_MS)), 0);
-  }
-
-  // --------- OBSERVERS & HOOKS (fast, event-driven) ----------
-  function hookAjax() {
-    $(document).off('ajaxComplete.dsuSoft').on('ajaxComplete.dsuSoft', (_e, _xhr, settings) => {
-      const url = settings?.url || '';
-      if (url.includes('ajaxaction=upgrade_building') ||
-          url.includes('ajaxaction=cancel_order') ||
-          url.includes('screen=main')) {
-        // queue likely changed
-        injectAddButtons(); renderInline(); scheduleTickSoon();
+    // duration: try data attrs, then text like 1:23:45 or 12:34
+    var secs = NaN;
+    var ds = btn.dataset || {};
+    secs = Number(ds.duration || ds.buildtime || ds.time);
+    if (!isFinite(secs) || secs <= 0){
+      var tcell = row && (row.querySelector('td:nth-child(2) span') || row.querySelector('.build_duration') || row.querySelector('.build_time'));
+      var txt = tcell && tcell.textContent || '';
+      var m = txt.match(/(?:(\d+):)?(\d{1,2}):(\d{2})/);
+      if (m){
+        secs = ((Number(m[1]||0)*60 + Number(m[2]))*60 + Number(m[3]))|0;
       }
-    });
+    }
+    if (!isFinite(secs) || secs <= 0) secs = 60;
+
+    return { name: name || building, imgSrc: imgSrc, secs: secs };
   }
 
-  function observeQueue() {
-    const $tbody = $('#build_queue #buildqueue');
-    if (!$tbody.length) return;
-    const mo = new MutationObserver(() => { // only on real changes
-      injectAddButtons(); renderInline(); scheduleTickSoon();
-    });
-    mo.observe($tbody[0], { childList: true, subtree: true });
+  function parseFromBtn(btn){
+    var building = btn.getAttribute('data-building') || '';
+    var levelNext = btn.getAttribute('data-level-next') || '';
+    if (!building || !levelNext){
+      var m = (btn.id || '').match(/^main_buildlink_([a-z_]+)_(\d+)$/);
+      if (m){ if (!building) building = m[1]; if (!levelNext) levelNext = m[2]; }
+    }
+    return { building: building, levelNext: Number(levelNext) };
   }
 
-  // --------- BOOT ----------
-  onReady(() => {
-    // tiny CSS touch so our rows look native but slightly greyed
-    const css = `
-      #build_queue tr.${SOFT_ROW} td, #build_queue tr.${SOFT_PROG} td { color: ${GREY_TXT}; }
-      #build_queue tr.${SOFT_ROW} { background: ${GREY_BG}; }
-      #build_queue tr.${SOFT_PROG} { background: ${GREY_BG}; }
-      .${ADD_BTN} { filter: grayscale(.2); }
-    `;
-    const st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
+  // ---------- ADD JOB ----------
+  function addSoft(building, levelNext, snap){
+    var q = sanitizeQueue(load());
+    var job = {
+      building: building,
+      levelNext: levelNext,
+      created: now(),
+      status: 'pending',
+      snap: {
+        name: (snap && snap.name) || (FALLBACK[building] && FALLBACK[building].name) || building,
+        imgSrc: (snap && snap.imgSrc) || guessImg(building),
+        secs: (snap && Number(snap.secs) > 0 ? Number(snap.secs) : 60)
+      }
+    };
+    q.unshift(job);
+    save(q);
+    try { if (window.UI && typeof UI.SuccessMessage === 'function') UI.SuccessMessage(job.snap.name + ' (Soft) hinzugefügt.'); } catch(_){}
+    renderSoftOnTop();
+    tryPromote();
+  }
 
-    injectAddButtons();
-    renderInline();
-    hookAjax();
-    observeQueue();
-    tick(); // immediate first run
+  // ---------- INJECT TWIN BUTTONS ----------
+  function injectTwins(){
+    var btns = document.querySelectorAll('a.btn.btn-build');
+    for (var i=0;i<btns.length;i++){
+      var btn = btns[i];
+      if (btn.dataset.dsuTwinAdded === '1') continue;
+
+      var parsed = parseFromBtn(btn);
+      if (!parsed.building || !isFinite(parsed.levelNext)) continue;
+
+      var twin = document.createElement('a');
+      twin.className = 'btn dsu-soft-build';
+      twin.href = '#';
+      twin.textContent = (btn.textContent || '').trim();
+      twin.style.marginLeft = '6px';
+      twin.title = 'Soft in die Bauschleife einreihen';
+
+      twin.addEventListener('click', function(sourceBtn){
+        return function(e){
+          e.preventDefault();
+          var p = parseFromBtn(sourceBtn);
+          if (!p.building || !isFinite(p.levelNext)){ warn('Twin click: cannot parse from', sourceBtn.id); return; }
+          var snap = snapshotFromDom(sourceBtn, p.building);
+          log('Twin clicked:', p, snap);
+          addSoft(p.building, p.levelNext, snap);
+        };
+      }(btn));
+
+      btn.insertAdjacentElement('afterend', twin);
+      btn.dataset.dsuTwinAdded = '1';
+      log('Injected twin for', btn.id || parsed.building);
+    }
+  }
+  injectTwins();
+
+  // Keep twins alive if DOM changes
+  var moTwins = new MutationObserver(function(){
+    try { injectTwins(); } catch(e){ warn('injectTwins() failed:', e); }
+  });
+  moTwins.observe(wrap, { childList:true, subtree:true });
+
+  // ---------- RENDERER ----------
+  var renderScheduled = false;
+  function clearSoftRows(){
+    var nodes = document.querySelectorAll('#buildqueue .dsu-soft-top, #buildqueue .dsu-soft-progress-top');
+    for (var i=0;i<nodes.length;i++) nodes[i].remove();
+  }
+
+function findLastNativeRow(queueBody){
+  var rows = queueBody.querySelectorAll('tr');
+  var last = null;
+  for (var i = rows.length - 1; i >= 0; i--) {
+    var tr = rows[i];
+    // skip header and our own soft rows
+    if (tr.querySelector('th')) break;
+    if (!tr.classList.contains('dsu-soft-top') &&
+        !tr.classList.contains('dsu-soft-progress-top')) {
+      last = tr;
+      break;
+    }
+  }
+  // if no native rows, fall back to header
+  return last || queueBody.querySelector('tr');
+}
+
+
+  function renderSoftOnTop(){
+    if (renderScheduled){ return; }
+    renderScheduled = true;
+    setTimeout(function(){
+      renderScheduled = false;
+      var queueBody = getQueueBody();
+      if (!queueBody) { log('render: #buildqueue not present, skip draw'); return; }
+
+      clearSoftRows();
+      var jobs = sanitizeQueue(load()).filter(function(j){ return j.status !== 'done'; });
+      if (!jobs.length) return;
+
+      var header = queueBody.querySelector('tr');
+      if (!header){ log('render: header row missing, skip'); return; }
+
+      var anchor = findLastNativeRow(queueBody);   // <— instead of: var anchor = header;
+var startT = now();
+
+// We store with unshift (newest first). For FIFO display, render oldest→newest.
+// Build a view with original indexes preserved for “Abbrechen”.
+var jobsRaw = sanitizeQueue(load()).filter(function(j){ return j.status !== 'done'; });
+if (!jobsRaw.length) return;
+
+var jobsView = [];
+for (var j = 0; j < jobsRaw.length; j++) jobsView.push({ job: jobsRaw[j], idx: j });
+jobsView.reverse(); // oldest first
+
+for (var v=0; v<jobsView.length; v++){
+  var job = jobsView[v].job;
+  var arrIdx = jobsView[v].idx; // original index in storage
+
+  var name = job.snap && job.snap.name || job.building;
+  var imgSrc = job.snap && job.snap.imgSrc || guessImg(job.building);
+  var secs = (job.snap && Number(job.snap.secs) > 0) ? Number(job.snap.secs) : 60;
+  var eta = startT + secs;
+
+  var trp = document.createElement('tr');
+  trp.className = 'lit dsu-soft-progress-top';
+  trp.innerHTML = '<td colspan="5" style="padding:0"><div class="order-progress"><div class="anim" style="width:0%; background-color:#bbb"></div></div></td>';
+
+  var tr = document.createElement('tr');
+  tr.className = 'lit nodrag dsu-soft-top buildorder_' + job.building;
+  tr.style.background = '#eee';
+  tr.innerHTML =
+    '<td class="lit-item">' +
+      '<img src="'+ imgSrc +'" class="bmain_list_img" data-title="'+ name.replace(/"/g,'&quot;') +'">' +
+      name + '<br>Stufe ' + job.levelNext +
+    '</td>' +
+    '<td class="nowrap lit-item"><span>'+ fmtHMS(secs) +'</span></td>' +
+    '<td class="lit-item"></td>' +
+    '<td class="lit-item">'+ fmtTodayTime(eta) +'</td>' +
+    '<td class="lit-item"><a class="btn dsu-cancel-soft" data-i="'+ arrIdx +'" href="javascript:void(0)">Abbrechen</a></td>'
+
+  anchor.after(trp);
+  trp.after(tr);
+  anchor = tr;
+  startT = eta;
+}
+
+
+var cancels = queueBody.querySelectorAll('.dsu-cancel-soft');
+for (var c = 0; c < cancels.length; c++) {
+  (function(a){
+    a.addEventListener('click', function(e){
+      e.preventDefault();
+      if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+      e.stopPropagation();
+
+      var idx = Number(a.getAttribute('data-i'));
+      var arr = sanitizeQueue(load());
+      if (idx >= 0 && idx < arr.length) {
+        arr.splice(idx, 1);
+        save(arr);
+        renderSoftOnTop();
+      }
+      return false;
+    }, true); // <-- capture phase
+  })(cancels[c]);
+}
+
+
+    }, 50);
+  }
+
+  // re-render when the native queue changes
+  var qb = getQueueBody();
+  if (qb){
+    var moQueue = new MutationObserver(function(){ try { renderSoftOnTop(); } catch(e){ warn('renderSoftOnTop failed:', e); } });
+    moQueue.observe(qb, { childList:true, subtree:true });
+  }
+
+  // ---------- AUTO-PROMOTE ----------
+  var promoteLock = false;
+  function findExactButton(building, levelNext){
+    var id = 'main_buildlink_' + building + '_' + levelNext;
+    var el = document.getElementById(id);
+    if (el && isVisible(el)) return el;
+    return null;
+  }
+  function confirmPopupOpen(){
+    // super-safe: check a few common containers/ids without :has()
+    return !!(document.getElementById('confirm_popup') ||
+              document.querySelector('.popup_box_container #confirm_popup') ||
+              document.querySelector('.popup_box_container .confirmation') ||
+              document.querySelector('#fpopup'));
+  }
+  function tryPromote(){
+    if (promoteLock) return;
+    var arr = sanitizeQueue(load());
+    if (!arr.length) return;
+
+    var job = arr[0];
+    if (confirmPopupOpen()) return;
+
+    var btn = findExactButton(job.building, job.levelNext);
+    if (!btn) return;
+
+    promoteLock = true;
+    log('Promote (click real):', btn.id, job);
+    try { btn.click(); } catch(e){ warn('btn.click failed:', e); }
+    arr.shift();
+    save(arr);
+    renderSoftOnTop();
+    setTimeout(function(){ promoteLock = false; }, 700);
+  }
+
+  // observe main wrapper to react to enable/disable of buttons
+  var moPromote = new MutationObserver(function(){
+    try { tryPromote(); } catch(e){ warn('tryPromote() failed:', e); }
+  });
+  moPromote.observe(wrap, { childList:true, subtree:true });
+
+  var iv = setInterval(function(){ try { tryPromote(); } catch(e){ warn('tryPromote interval failed:', e); } }, 1800);
+  window.addEventListener('beforeunload', function(){ try { clearInterval(iv); } catch(_){ } });
+
+  // ---------- STYLE ----------
+  var style = document.createElement('style');
+  style.textContent =
+    'a.dsu-soft-build{opacity:.95} a.dsu-soft-build:hover{opacity:1}' +
+    '#buildqueue .dsu-soft-top td,#buildqueue .dsu-soft-progress-top td{background:#eee!important}' +
+    '#buildqueue .dsu-soft-top .btn-cancel{background:#d5d5d5;border-color:#c2c2c2}' +
+    '#buildqueue .dsu-soft-top img.bmain_list_img{filter:grayscale(.3)}';
+  document.head.appendChild(style);
+
+  // ---------- BOOT ----------
+  renderSoftOnTop();
+
+  // external API (optional)
+  window.addEventListener('dsu:softqueue:add', function(ev){
+    var d = (ev && ev.detail) || {};
+    if (!d.building || !isFinite(d.levelNext)) return;
+    addSoft(d.building, d.levelNext, null);
   });
 })();
