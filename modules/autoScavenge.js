@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Raubzug schicken + Auto Toggle
-// @version      1.3
-// @description  Rechnet/Fügt die Truppen ein und sendet automatisch alle 30s mit Toggle & sequentiellen Startklicks (von hinten nach vorne)
+// @version      1.5
+// @description  Rechnet/Fügt die Truppen ein und sendet automatisch alle 30s mit Toggle & sequentiellen Startklicks (von hinten nach vorne) + 2 Optimierungsoptionen
 // @author       TheHebel97, Osse (+auto by you)
 // @match        https://*.die-staemme.de/game.php?*&screen=place&mode=scavenge*
 // @run-at       document-idle
@@ -20,6 +20,16 @@ api.register('470-Raubzug schicken', true, 'osse, TheHebel97', 'support-nur-im-f
   let autoIv = null;
   let autoBusy = false;
   let lastClickTs = 0;
+
+  // [ADD] Optimization (only two modes)
+  const OPT_KEY = 'dsu_scavenger_opt_mode'; // 'equalTime' | 'perHour'
+  let optMode = localStorage.getItem(OPT_KEY) || 'equalTime';
+
+  // [ADD] Carry map (common TW values; only units present on this screen)
+  const CARRY = { spear: 25, sword: 15, axe: 10, light: 80, heavy: 50, knight: 100 };
+
+  // [ADD] Scavenge ratios
+  const RATIOS = [0.10, 0.25, 0.50, 0.75];
 
   setTimeout(function () {
     setupUI();
@@ -42,14 +52,24 @@ api.register('470-Raubzug schicken', true, 'osse, TheHebel97', 'support-nur-im-f
     $(".SendScavenger").on("click", function () {
       Start = 1;
       rzSlots = readOutRZSlotsCB();
-      let arrayUseableTroops = getTroopAmount();
+      let arrayUseableTroops = getTroopAmount(); // [{unit, amount, value}, ...]
       let SendTroops = [];
-      for (let index = 0; index < 4; index++) {
-        const element = rzSlots.charAt(index);
-      }
+
+      // [ADD] Build enabled slot indices
+      const enabledIdx = [];
+      for (let i = 0; i < 4; i++) if (rzSlots.charAt(i) === '1') enabledIdx.push(i);
+
+      // [ADD] Compute GLOBAL fractional split 'a' (sum to 1 over enabled)
+      const totalCap = arrayUseableTroops.reduce((s, e) => s + (CARRY[e.unit] || 0) * (parseInt(e.amount) || 0), 0);
+      const a = (optMode === 'perHour')
+        ? computeOptimalA_PerHour(totalCap, enabledIdx)
+        : computeEqualTimeA(enabledIdx);
+
+      // [ADD] Split each *unit count* according to 'a' (minimal change)
       arrayUseableTroops.forEach(element => {
-        SendTroops[element["unit"]] = getTroopsPerRzSlot(element["amount"], rzSlots, "equalyLong");
+        SendTroops[element.unit] = splitByFractions(element.amount, a);
       });
+
       Truppenarray = SendTroops;
       startScavenger();
     });
@@ -63,9 +83,7 @@ api.register('470-Raubzug schicken', true, 'osse, TheHebel97', 'support-nur-im-f
 
     if ($('.premium_send_button').length > 0) {
       $(".premium_send_button").on("click", function () {
-        setTimeout(() => {
-          sendPremium();
-        }, 200);
+        setTimeout(() => { sendPremium(); }, 200);
       });
     }
 
@@ -86,7 +104,7 @@ api.register('470-Raubzug schicken', true, 'osse, TheHebel97', 'support-nur-im-f
       setTimeout(function () {
         let Scaveng = 0;
         for (let index = 3; index > -1; index--) {
-          const element = rzSlots.charAt(index);
+          const element = rzSlots.charAt(index)
           if (element === "1" && Scaveng === 0) {
             Scaveng = 1;
             if ($('.scavenge-option').eq(index).find('.premium_send_button').length > 0) {
@@ -96,7 +114,7 @@ api.register('470-Raubzug schicken', true, 'osse, TheHebel97', 'support-nur-im-f
               $('.scavenge-option').eq(index).find('.free_send_button').css('visibility', "visible");
             }
             getTroopAmount().forEach(element => {
-              let eInput = document.querySelector("#scavenge_screen > div > div.candidate-squad-container > table > tbody > tr:nth-child(2) > td:nth-child(" + element["value"] + ") > input");
+              let eInput = document.querySelector("#scavenge_screen > div > div.candidate-squad-container > table > tbody > tr:nth-child(2) > td:nth-child(" + element["value"] + ") > input")
               eInput.value = Truppenarray[element["unit"]][index];
               let event = new Event('change');
               eInput.dispatchEvent(event);
@@ -132,11 +150,7 @@ api.register('470-Raubzug schicken', true, 'osse, TheHebel97', 'support-nur-im-f
               if (parseInt($('.maxTroops').val()) < amount) {
                 amount = parseInt($('.maxTroops').val());
               }
-              let temparray = {
-                unit: element,
-                amount: amount,
-                value: value
-              }
+              let temparray = { unit: element, amount: amount, value: value };
               if (parseInt(amount) > 0) troopObject.push(temparray)
             }
           })
@@ -145,28 +159,88 @@ api.register('470-Raubzug schicken', true, 'osse, TheHebel97', 'support-nur-im-f
       return troopObject
     }
 
-    function getTroopsPerRzSlot(amount, level, calcType) {
-      let weigths;
-      switch (calcType) {
-        case "equalyLong":
-          weigths = [7.5, 3, 1.5, 1]
+    // [ADD] Distribute a unit count by fractions a[0..3]
+    function splitByFractions(amount, a) {
+      const res = [0,0,0,0];
+      let assigned = 0;
+      for (let i = 0; i < 4; i++) {
+        const v = Math.floor((amount || 0) * (a[i] || 0));
+        res[i] = v;
+        assigned += v;
       }
-      let amounts = []
-      let sum = 0
-      for (var i = 0; i < weigths.length; i++) {
-        if (level.charAt(i) == "1") {
-          sum += weigths[i]
+      // put any remainder into the last enabled slot (if any)
+      const remainder = (amount || 0) - assigned;
+      if (remainder > 0) {
+        for (let i = 3; i >= 0; i--) {
+          if (a[i] > 0) { res[i] += remainder; break; }
         }
       }
-      for (var i = 0; i < weigths.length; i++) {
-        if (level.charAt(i) == "1") {
-          let troops = Math.floor(amount * weigths[i] / sum)
-          amounts.push(troops)
-        } else {
-          amounts.push(0)
+      return res;
+    }
+
+    // [ADD] Equal-time fractions: a_i ∝ 1/ratio_i for enabled slots
+    function computeEqualTimeA(enabledIdx) {
+      const a = [0,0,0,0];
+      let sum = 0;
+      enabledIdx.forEach(i => { a[i] = 1 / RATIOS[i]; sum += a[i]; });
+      if (sum <= 0) return a;
+      enabledIdx.forEach(i => { a[i] = a[i] / sum; });
+      return a;
+    }
+
+    // [ADD] Resources/hour objective (df cancels for optimization)
+    function revPerHour(iCap, ai, i) {
+      if (ai <= 0) return 0;
+      const r = RATIOS[i];
+      // revenue = (iCap*ai*r) / ( ((iCap*ai)^2 * 100 * r^2) ^0.45 + 1800 )
+      const load = iCap * ai;
+      const denom = Math.pow((load*load) * 100 * (r*r), 0.45) + 1800;
+      return (load * r) / denom;
+    }
+
+    // [ADD] Evaluate total revenue for vector a
+    function totalRev(iCap, a) {
+      let s = 0;
+      for (let i = 0; i < 4; i++) s += revPerHour(iCap, a[i] || 0, i);
+      return s;
+    }
+
+    // [ADD] Optimize a over enabled by simple coordinate-descent (adjacent transfers)
+    function computeOptimalA_PerHour(iCap, enabledIdx) {
+      const a = [0,0,0,0];
+      if (!enabledIdx.length || iCap <= 0) return a;
+
+      // init equal over enabled
+      enabledIdx.forEach(i => a[i] = 1 / enabledIdx.length);
+
+      let improved = true;
+      let guard = 0;
+      while (improved && guard++ < 200) {
+        improved = false;
+        for (let k = 0; k < enabledIdx.length - 1; k++) {
+          const i = enabledIdx[k], j = enabledIdx[k+1];
+
+          const cur = totalRev(iCap, a);
+
+          // move half of i -> j
+          if (a[i] > 0) {
+            const di = a[i] * 0.5;
+            a[i] -= di; a[j] += di;
+            const v1 = totalRev(iCap, a);
+            // revert if worse
+            if (v1 <= cur) { a[j] -= di; a[i] += di; } else { improved = true; continue; }
+          }
+
+          // move half of j -> i
+          if (a[j] > 0) {
+            const dj = a[j] * 0.5;
+            a[j] -= dj; a[i] += dj;
+            const v2 = totalRev(iCap, a);
+            if (v2 <= cur) { a[i] -= dj; a[j] += dj; } else { improved = true; }
+          }
         }
       }
-      return amounts
+      return a;
     }
 
     function setupUI() {
@@ -190,6 +264,9 @@ api.register('470-Raubzug schicken', true, 'osse, TheHebel97', 'support-nur-im-f
 
       // ---- Auto-Toggle UI ----
       addToggleUI();
+
+      // [ADD] Two-option optimization UI (mutually exclusive)
+      addOptimizationUI();
 
       // ---- Start Auto Timer ----
       if (!autoIv) {
@@ -222,6 +299,52 @@ api.register('470-Raubzug schicken', true, 'osse, TheHebel97', 'support-nur-im-f
         const sec = lastClickTs ? Math.floor((Date.now() - lastClickTs) / 1000) : '–';
         $('#autoLast').text(sec + 's');
       }, 1000);
+    }
+
+    // [ADD] Two checkboxes right above the table
+    function addOptimizationUI() {
+      if ($('#dsu-opt-box').length) return;
+
+      const optBox = $(`
+        <div id="dsu-opt-box" style="margin:6px 0 10px 0;display:flex;gap:18px;align-items:center;">
+          <strong>Optimierung:</strong>
+          <label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;">
+            <input type="checkbox" id="optEqualTime">
+            Gleiche Dauer
+          </label>
+          <label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;">
+            <input type="checkbox" id="optPerHour">
+            Rohstoffe / Stunde
+          </label>
+          <span style="opacity:.7;font-size:11px">(*wirkt beim Klick auf "Raubzug senden")</span>
+        </div>
+      `);
+
+      $(".candidate-squad-widget").before(optBox);
+
+      // restore
+      $('#optEqualTime').prop('checked', optMode === 'equalTime');
+      $('#optPerHour').prop('checked', optMode === 'perHour');
+
+      // mutual exclusivity + persist
+      $('#optEqualTime').on('change', function () {
+        if ($(this).is(':checked')) {
+          $('#optPerHour').prop('checked', false);
+          optMode = 'equalTime';
+        } else {
+          optMode = $('#optPerHour').is(':checked') ? 'perHour' : 'equalTime';
+        }
+        localStorage.setItem(OPT_KEY, optMode);
+      });
+      $('#optPerHour').on('change', function () {
+        if ($(this).is(':checked')) {
+          $('#optEqualTime').prop('checked', false);
+          optMode = 'perHour';
+        } else {
+          optMode = $('#optEqualTime').is(':checked') ? 'equalTime' : 'perHour';
+        }
+        localStorage.setItem(OPT_KEY, optMode);
+      });
     }
 
     function readOutRZSlotsCB() {
@@ -269,10 +392,7 @@ api.register('470-Raubzug schicken', true, 'osse, TheHebel97', 'support-nur-im-f
     function setLocalStorage() {
       let tempArray = [];
       $(".checkboxTroops").each(function () {
-        let tempObject = {
-          unit: $(this).attr("unit"),
-          checked: $(this).is(":checked")
-        }
+        let tempObject = { unit: $(this).attr("unit"), checked: $(this).is(":checked") }
         tempArray.push(tempObject)
       })
       storage.setItem("scavenger", JSON.stringify(tempArray))
@@ -280,16 +400,12 @@ api.register('470-Raubzug schicken', true, 'osse, TheHebel97', 'support-nur-im-f
       storage.setItem("maxScavenger", maxValue)
       tempArray = [];
       for (let index = 0; index <= 4; index++) {
-        if ($(".checkbox_" + index).is(':checked')) {
-          tempArray.push(1);
-        } else {
-          tempArray.push(0);
-        }
+        if ($(".checkbox_" + index).is(':checked')) { tempArray.push(1); } else { tempArray.push(0); }
       }
       storage.setItem("SelectionScavenger", JSON.stringify(tempArray))
     }
 
-    // ---- Auto Flow ----
+    // ---- Auto Flow (unchanged) ----
     function runAutoOnce() {
       if (!autoEnabled || autoBusy) return;
       const $send = $('.SendScavenger.btn:visible');
