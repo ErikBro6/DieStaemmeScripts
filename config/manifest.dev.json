@@ -31,6 +31,7 @@
     ],
     "info_player": "/modules/playerInfoTools.js",
     "info_village": "/modules/singleVillageSnipe.js",
+    "info_ally": "/modules/tribeStats.js",
     "main": [
       "/config/assetsBase.js",
       "/modules/softBuildQueue.js"
