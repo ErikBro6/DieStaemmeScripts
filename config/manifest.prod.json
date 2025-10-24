@@ -30,9 +30,11 @@
     ],
     "info_player": "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/playerInfoTools.js",
     "info_village": "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/singleVillageSnipe.js",
+    "info_ally": "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/tribeStats.js",
     "main": [
         "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/config/assetsBase.js",
-      "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/softBuildQueue.js"
+        "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/softBuildQueue.js",
+        "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/buildHelper.js"
     ]
   }
 }

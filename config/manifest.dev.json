@@ -34,7 +34,8 @@
     "info_ally": "/modules/tribeStats.js",
     "main": [
       "/config/assetsBase.js",
-      "/modules/softBuildQueue.js"
+      "/modules/softBuildQueue.js",
+      "/modules/buildHelper.js"
     ]
   }
 }
