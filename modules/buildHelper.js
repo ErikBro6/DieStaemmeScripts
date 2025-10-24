@@ -7,11 +7,6 @@ wind.ScriptAPI.register('690-Dorfaufbau-Helfer (Startphase)', true, 'suilenroc',
 let SettingsHelper;           // <— declare in module scope so strict-mode is happy
 
 
-if(wind.premium !== true) {
-    UI.ErrorMessage('Das Skript kann nur mit einem Premium-Account verwendet werden!')
-    return
-};
-
 function setupConfig() {
     //defines variables with default values if not set
     function setup(name, defaultValue) {
@@ -70,11 +65,13 @@ function getResProduction(lvl, type) {
     return Math.round(parseFloat(SettingsHelper.getServerConf().game.base_production) * parseFloat(SettingsHelper.getServerConf().speed) * Math.pow(1.163118, (parseInt(lvl ? lvl : type ? game_data.village.buildings[type] : null) - 1)) * (type && game_data.village.bonus != null && game_data.village.bonus[type] != null ? game_data.village.bonus[type] : 1))
 }
  
-this.amortisation = (type)=>{
-    let building = BuildingMain.buildings[type]
-    let cheap_cost = building.wood_cheap + building.stone_cheap + building.iron_cheap
-    return cheap_cost / (getResProduction(building.level_next, type) - getResProduction(building.level_next - 1, type))
+function amortisation(type){
+    const building = BuildingMain.buildings[type];
+    const cheap_cost = building.wood_cheap + building.stone_cheap + building.iron_cheap;
+    return cheap_cost / (getResProduction(building.level_next, type) - getResProduction(building.level_next - 1, type));
 }
+wind.amortisation = amortisation;   // expose if others call it
+
  
 function hqFactor(lvl) {
     return Math.pow(1.05, (-parseInt(lvl ? lvl : game_data.village.buildings.main)))
@@ -399,7 +396,8 @@ function initSettingsHelper() {
             return false
         }
         
-    }
+    };
+    (typeof unsafeWindow !== 'undefined' ? unsafeWindow : window).SettingsHelper = SettingsHelper;
 }
  
 })();
