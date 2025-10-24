@@ -1,26 +1,5 @@
-// ==UserScript==
-// @name         Raubzug schicken + Auto Toggle
-// @version      1.5
-// @description  Rechnet/Fügt die Truppen ein und sendet automatisch alle 30s mit Toggle & sequentiellen Startklicks (von hinten nach vorne) + 2 Optimierungsoptionen
-// @author       TheHebel97, Osse (+auto by you)
-// @match        https://*.die-staemme.de/game.php?*&screen=place&mode=scavenge*
-// @run-at       document-idle
-// ==/UserScript==
 
-var api = typeof unsafeWindow != 'undefined' ? unsafeWindow.ScriptAPI : window.ScriptAPI;
-api.register('470-Raubzug schicken', true, 'osse, TheHebel97', 'support-nur-im-forum@die-staemme.de');
-
-(function () {
-  'use strict';
-
-  // ---- Auto Config ----
-  const AUTO_INTERVAL_MS = 30_000;
-  const AUTO_KEY = 'dsu_scavenger_auto_enabled';
-  const POST_FINISH_DELAY_MS = 1500;   // extra wait after 00:00:00 before reloading
-  let autoEnabled = JSON.parse(localStorage.getItem(AUTO_KEY) || 'true');
-  let autoIv = null;
-  let autoBusy = false;
-  let lastClickTs = 0;
+  // [REMOVED] Auto-Send constants & UI
 
   // [ADD] Optimization (only two modes)
   const OPT_KEY = 'dsu_scavenger_opt_mode'; // 'equalTime' | 'perHour'
@@ -34,125 +13,6 @@ api.register('470-Raubzug schicken', true, 'osse, TheHebel97', 'support-nur-im-f
 
   setTimeout(function () {
     setupUI();
-// ---- Auto-Refresh nach Scavenge-Ende ---------------------------------------
-const REFRESH_JITTER_MS = 1200;      // ~1.2s nach 00:00:00 neu laden
-const MAX_REASONABLE_MS = 8 * 3600_000; // Safety: >8h ignorieren
-let refreshTmo = null;
-
-// "H:MM:SS" -> Sekunden
-function parseHMS(t) {
-  if (!t) return null;
-  const m = String(t).trim().match(/^(\d+):(\d{2}):(\d{2})$/);
-  if (!m) return null;
-  const h = parseInt(m[1], 10), mi = parseInt(m[2], 10), s = parseInt(m[3], 10);
-  return (h * 3600) + (mi * 60) + s;
-}
-
-// Liefert die kleinste Restzeit aller aktiven Countdowns in ms (oder null)
-function getMinCountdownMs() {
-  let minSec = null;
-  $('.scavenge-option .active-view .return-countdown').each(function () {
-    const sec = parseHMS($(this).text());
-    if (sec == null) return;
-    if (minSec == null || sec < minSec) minSec = sec;
-  });
-  if (minSec == null) return null;
-  const ms = (minSec * 1000) + REFRESH_JITTER_MS;
-  if (ms <= 0 || ms > MAX_REASONABLE_MS) return null;
-  return ms;
-}
-// Robust reload that works on Firefox/containers too
-function forceReload(cacheBust = true) {
-  try {
-    const url = new URL(location.href);
-    if (cacheBust) url.searchParams.set('_tmr', Date.now());
-    // replace() avoids polluting history
-    location.replace(url.toString());
-  } catch {
-    // Fallback
-    location.href = location.href;
-  }
-}
-
-// Plant den nächsten Reload neu
-function scheduleNextReload() {
-  if (refreshTmo) { clearTimeout(refreshTmo); refreshTmo = null; }
-  const ms = getMinCountdownMs();
-  if (ms == null) return;           // nichts aktiv -> kein Reload nötig
-  refreshTmo = setTimeout(() => {
-    // Falls inzwischen neue Countdowns hinzugekommen sind, prüfe sofort nochmal
-    // (verhindert verfrühten Reload, wenn DOM sich gerade geändert hat)
-    const recheck = getMinCountdownMs();
-    if (recheck != null && recheck > 2500) {
-      // Noch nicht ganz fertig, neu planen
-      scheduleNextReload();
-      return;
-    }
-     setTimeout(() => {
-      forceReload(true);
-    }, POST_FINISH_DELAY_MS);
-  }, ms);
-}
-
-// Debounce-Helfer für Observer
-function debounce(fn, wait) {
-  let t = null;
-  return function () {
-    if (t) clearTimeout(t);
-    t = setTimeout(fn, wait);
-  };
-}
-
-// Beobachtet Änderungen an Countdowns / Status-Wechseln
-function installScavengeObserver() {
-  const host = document.querySelector('.options-container');
-  if (!host) return;
-  const reschedule = debounce(scheduleNextReload, 200);
-
-  const mo = new MutationObserver((mutList) => {
-    // Nur reagieren, wenn Text/Nodes im relevanten Bereich sich ändern
-    for (const m of mutList) {
-      if (m.type === 'characterData') { reschedule(); return; }
-      if (m.type === 'childList') {
-        // Neue/entfernte .active-view / .return-countdown / Buttons
-        if ([...m.addedNodes, ...m.removedNodes].some(n => {
-          return (n.nodeType === 1) && (
-            n.matches?.('.active-view, .return-countdown, .free_send_button, .premium_send_button') ||
-            n.querySelector?.('.active-view, .return-countdown, .free_send_button, .premium_send_button')
-          );
-        })) { reschedule(); return; }
-      }
-      if (m.type === 'attributes' && (m.target?.classList?.contains('return-countdown'))) {
-        reschedule(); return;
-      }
-    }
-  });
-
-  mo.observe(host, {
-    subtree: true,
-    childList: true,
-    characterData: true,
-    attributes: true,
-    attributeFilter: ['class'] // schlank halten
-  });
-
-  // Initial planen
-  scheduleNextReload();
-
-  // Fail-safe: alle 30s neu berechnen (falls Observer Events verpassen sollte)
-  setInterval(scheduleNextReload, 30_000);
-}
-
-// Initialisierung sofort nach UI-Aufbau
-installScavengeObserver();
-
-// Optional: nach Auto-Send neu planen (falls Sie unmittelbar Buttons klicken)
-const _oldRunAutoOnce = runAutoOnce;
-runAutoOnce = function () {
-  _oldRunAutoOnce();
-  // nach Klicks/Dispatch leicht verzögert neu planen
-  setTimeout(scheduleNextReload, 1500);
-};
 
     let storage = localStorage;
     getLocalStorage();
@@ -175,17 +35,17 @@ runAutoOnce = function () {
       let arrayUseableTroops = getTroopAmount(); // [{unit, amount, value}, ...]
       let SendTroops = [];
 
-      // [ADD] Build enabled slot indices
+      // Build enabled slot indices
       const enabledIdx = [];
       for (let i = 0; i < 4; i++) if (rzSlots.charAt(i) === '1') enabledIdx.push(i);
 
-      // [ADD] Compute GLOBAL fractional split 'a' (sum to 1 over enabled)
+      // Compute GLOBAL fractional split 'a' (sum to 1 over enabled)
       const totalCap = arrayUseableTroops.reduce((s, e) => s + (CARRY[e.unit] || 0) * (parseInt(e.amount) || 0), 0);
       const a = (optMode === 'perHour')
         ? computeOptimalA_PerHour(totalCap, enabledIdx)
         : computeEqualTimeA(enabledIdx);
 
-      // [ADD] Split each *unit count* according to 'a' (minimal change)
+      // Split each *unit count* according to 'a'
       arrayUseableTroops.forEach(element => {
         SendTroops[element.unit] = splitByFractions(element.amount, a);
       });
@@ -195,10 +55,8 @@ runAutoOnce = function () {
     });
 
     $(".free_send_button").on("click", function () {
-      if (Start === 1) {
-        $(".SendScavenger").css('visibility', "hidden");
-        startScavenger();
-      }
+      // follow-up clicks when a free button appears again
+      startScavenger();
     });
 
     if ($('.premium_send_button').length > 0) {
@@ -209,10 +67,7 @@ runAutoOnce = function () {
 
     function sendPremium() {
       $(".evt-confirm-btn").on("click", function () {
-        if (Start === 1) {
-          $(".SendScavenger").css('visibility', "hidden");
-          startScavenger();
-        }
+        startScavenger();
       });
     }
 
@@ -279,7 +134,7 @@ runAutoOnce = function () {
       return troopObject
     }
 
-    // [ADD] Distribute a unit count by fractions a[0..3]
+    // Distribute a unit count by fractions a[0..3]
     function splitByFractions(amount, a) {
       const res = [0,0,0,0];
       let assigned = 0;
@@ -298,7 +153,7 @@ runAutoOnce = function () {
       return res;
     }
 
-    // [ADD] Equal-time fractions: a_i ∝ 1/ratio_i for enabled slots
+    // Equal-time fractions: a_i ∝ 1/ratio_i for enabled slots
     function computeEqualTimeA(enabledIdx) {
       const a = [0,0,0,0];
       let sum = 0;
@@ -308,7 +163,7 @@ runAutoOnce = function () {
       return a;
     }
 
-    // [ADD] Resources/hour objective (df cancels for optimization)
+    // Resources/hour objective (df cancels for optimization)
     function revPerHour(iCap, ai, i) {
       if (ai <= 0) return 0;
       const r = RATIOS[i];
@@ -318,14 +173,13 @@ runAutoOnce = function () {
       return (load * r) / denom;
     }
 
-    // [ADD] Evaluate total revenue for vector a
     function totalRev(iCap, a) {
       let s = 0;
       for (let i = 0; i < 4; i++) s += revPerHour(iCap, a[i] || 0, i);
       return s;
     }
 
-    // [ADD] Optimize a over enabled by simple coordinate-descent (adjacent transfers)
+    // Optimize a over enabled by simple coordinate-descent (adjacent transfers)
     function computeOptimalA_PerHour(iCap, enabledIdx) {
       const a = [0,0,0,0];
       if (!enabledIdx.length || iCap <= 0) return a;
@@ -347,7 +201,6 @@ runAutoOnce = function () {
             const di = a[i] * 0.5;
             a[i] -= di; a[j] += di;
             const v1 = totalRev(iCap, a);
-            // revert if worse
             if (v1 <= cur) { a[j] -= di; a[i] += di; } else { improved = true; continue; }
           }
 
@@ -382,46 +235,11 @@ runAutoOnce = function () {
         $(this).parent().append('<input class="checkboxTroops" type="checkbox" checked="" style="width:20%;" unit="' + unit + '"></input>');
       });
 
-      // ---- Auto-Toggle UI ----
-      addToggleUI();
-
       // [ADD] Two-option optimization UI (mutually exclusive)
       addOptimizationUI();
-
-      // ---- Start Auto Timer ----
-      if (!autoIv) {
-        autoIv = setInterval(runAutoOnce, AUTO_INTERVAL_MS);
-        setTimeout(runAutoOnce, 800);
-      }
     }
 
-    function addToggleUI() {
-      if ($('#dsu-auto-toggle').length) return;
-      const box = $(`
-        <div id="dsu-auto-toggle" style="
-          position:fixed;right:10px;bottom:50px;z-index:9999;
-          background:#222;color:#fff;padding:8px 10px;border-radius:8px;
-          box-shadow:0 4px 18px rgba(0,0,0,.3);font:12px system-ui;display:flex;align-items:center;gap:8px;">
-          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-            <input id="autoEnabledBox" type="checkbox" ${autoEnabled ? 'checked' : ''}>
-            Auto Raubzug (30s)
-          </label>
-          <span style="opacity:.8">⏱️ <span id="autoLast">–</span></span>
-        </div>
-      `);
-      $('body').append(box);
-      $('#autoEnabledBox').on('change', function () {
-        autoEnabled = $(this).is(':checked');
-        localStorage.setItem(AUTO_KEY, JSON.stringify(autoEnabled));
-      });
-
-      setInterval(() => {
-        const sec = lastClickTs ? Math.floor((Date.now() - lastClickTs) / 1000) : '–';
-        $('#autoLast').text(sec + 's');
-      }, 1000);
-    }
-
-    // [ADD] Two checkboxes right above the table
+    // Two checkboxes right above the table
     function addOptimizationUI() {
       if ($('#dsu-opt-box').length) return;
 
@@ -525,33 +343,6 @@ runAutoOnce = function () {
       storage.setItem("SelectionScavenger", JSON.stringify(tempArray))
     }
 
-    // ---- Auto Flow (unchanged) ----
-    function runAutoOnce() {
-      if (!autoEnabled || autoBusy) return;
-      const $send = $('.SendScavenger.btn:visible');
-      if (!$send.length) return;
-
-      autoBusy = true;
-      try {
-        $send.first().trigger('click');
-        lastClickTs = Date.now();
-
-        setTimeout(() => {
-          const $starts = $('.scavenge-option .free_send_button:visible');
-          let idx = $starts.length - 1;
-          function clickNext() {
-            if (idx < 0) { autoBusy = false; return; }
-            const $btn = $starts.eq(idx);
-            if ($btn && $btn.length) $btn.trigger('click');
-            idx--;
-            setTimeout(clickNext, 1000);
-          }
-          clickNext();
-        }, 1000);
-      } catch (e) {
-        autoBusy = false;
-      }
-    }
+    // [REMOVED] runAutoOnce & intervals entirely
 
   }, 50);
-})();
