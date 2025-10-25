@@ -5,6 +5,7 @@
 // @description  Automatisiert Masseneinheitenrekrutierung mit UI-Kontrolle in Die Stämme (DE)
 // @author       SpeckMich
 // @match        https://*.die-staemme.de/game.php?village=*&screen=train*
+// @match        https://*.die-staemme.de/game.php?screen=train*
 // @grant        none
 // @run-at       document-idle
 // ==/UserScript==

@@ -404,9 +404,8 @@ runAutoOnce = function () {
           box-shadow:0 4px 18px rgba(0,0,0,.3);font:12px system-ui;display:flex;align-items:center;gap:8px;">
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
             <input id="autoEnabledBox" type="checkbox" ${autoEnabled ? 'checked' : ''}>
-            Auto Raubzug (30s)
+            Auto Raubzug
           </label>
-          <span style="opacity:.8">⏱️ <span id="autoLast">–</span></span>
         </div>
       `);
       $('body').append(box);

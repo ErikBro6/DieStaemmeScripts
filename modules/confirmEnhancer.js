@@ -1,8 +1,3 @@
-// == confirmEnhancer.js (clean, no close-tab) ==
-console.log("Confirm Enhancer");
-
-
-
 // at top of confirmEnhancer.js
 const CACHE_BUCKET_MS = 60_000;
 const cacheBust = (u) => u + (u.includes("?") ? "&" : "?") + "_cb=" + Math.floor(Date.now()/CACHE_BUCKET_MS);
