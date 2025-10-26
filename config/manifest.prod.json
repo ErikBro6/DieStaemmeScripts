@@ -9,7 +9,11 @@
       { "url": "modules/confirmEnhancer.js", "id": "confirmEnhancer", "title": "Bestätigungs-Booster", "desc": "Verbessert Bestätigungs-Dialoge am Platz." },
       { "url": "modules/autoSender.js", "id": "autoSender", "title": "Auto-Sender", "desc": "Automatisierte Sende-Flows." },
       { "url": "modules/massSupporter.js", "id": "massSupporter", "title": "Massen-Unterstützer", "desc": "Viele Dörfer schnell unterstützen."},
-      { "url": "modules/autoScavenge.js", "id": "autoScavenge", "title": "Auto-Raubzug", "desc": "Automatisches Scavenging / Raubzüge." }
+      { "url": "modules/scavenger.calc.js", "id": "calcScavenge", "title": "Raubzug-Rechner", "desc": "Berechner für Raubzug-Optimierung." },
+      { "url": "modules/scavenger.auto.js", "id": "autoScavenge", "title": "Raubzug-Automatisierung", "desc": "Automatisches Scavenging / Raubzüge." }
+    ],
+    "train": [
+      { "url": "modules/autoRecruit.js", "id": "autoRecruit", "title": "Rekrutierungs-Automatisierung", "desc": "Automatisches Rekrutieren von Einheiten über Massen-Rekrutierung." }
     ],
     "map": [
       { "url": "config/assetsBase.js", "id": "assetsBaseMap", "title": "Assets-Basis (Karte)", "desc": "Grund-Styles/Assets für Kartentools." },

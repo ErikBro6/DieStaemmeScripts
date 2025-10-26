@@ -16,7 +16,7 @@ api.register('470-Raubzug schicken', true, 'osse, TheHebel97', 'support-nur-im-f
   // ---- Auto Config ----
   const AUTO_INTERVAL_MS = 30_000;
   const AUTO_KEY = 'dsu_scavenger_auto_enabled';
-  const POST_FINISH_DELAY_MS = 1500;   // extra wait after 00:00:00 before reloading
+  const POST_FINISH_DELAY_MS = 2500;   // extra wait after 00:00:00 before reloading
   let autoEnabled = JSON.parse(localStorage.getItem(AUTO_KEY) || 'true');
   let autoIv = null;
   let autoBusy = false;
@@ -35,7 +35,7 @@ api.register('470-Raubzug schicken', true, 'osse, TheHebel97', 'support-nur-im-f
   setTimeout(function () {
     setupUI();
 // ---- Auto-Refresh nach Scavenge-Ende ---------------------------------------
-const REFRESH_JITTER_MS = 1200;      // ~1.2s nach 00:00:00 neu laden
+const REFRESH_JITTER_MS = 2000;      // 2s nach 00:00:00 neu laden
 const MAX_REASONABLE_MS = 8 * 3600_000; // Safety: >8h ignorieren
 let refreshTmo = null;
 
@@ -469,30 +469,59 @@ function buildSlotPlans(arrayUseableTroops, a, enabledIdx) {
       }
     }
 
-    function addToggleUI() {
-      if ($('#dsu-auto-toggle').length) return;
-      const box = $(`
-        <div id="dsu-auto-toggle" style="
-          position:fixed;right:10px;bottom:50px;z-index:9999;
-          background:#222;color:#fff;padding:8px 10px;border-radius:8px;
-          box-shadow:0 4px 18px rgba(0,0,0,.3);font:12px system-ui;display:flex;align-items:center;gap:8px;">
-          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-            <input id="autoEnabledBox" type="checkbox" ${autoEnabled ? 'checked' : ''}>
-            Auto Raubzug
-          </label>
-        </div>
-      `);
-      $('body').append(box);
-      $('#autoEnabledBox').on('change', function () {
-        autoEnabled = $(this).is(':checked');
-        localStorage.setItem(AUTO_KEY, JSON.stringify(autoEnabled));
-      });
+// Ensure CSS is present (no-op if already added in manifest)
+(function ensureCss() {
+  if (document.querySelector('link[data-dsu-ui]')) return;
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = 'https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/css/ds-tools.css'; // <-- adjust to your path
+  link.setAttribute('data-dsu-ui', '1');
+  document.head.appendChild(link);
+})();
 
-      setInterval(() => {
-        const sec = lastClickTs ? Math.floor((Date.now() - lastClickTs) / 1000) : '–';
-        $('#autoLast').text(sec + 's');
-      }, 1000);
-    }
+function addToggleUI() {
+  if (document.getElementById('dsu-auto-toggle')) return;
+
+  const wrap = document.createElement('div');
+  wrap.id = 'dsu-auto-toggle';
+  wrap.className = 'dsu-card dsu-floating dsu-right-20 dsu-bottom-50';
+
+  wrap.innerHTML = `
+    <div class="dsu-row" style="gap:12px;">
+      <label class="dsu-switch">
+        <input id="autoEnabledBox" type="checkbox" ${autoEnabled ? 'checked' : ''}>
+        <span>Auto Raubzug</span>
+      </label>
+      <span class="dsu-badge">Scavenge</span>
+      <span class="dsu-status" id="autoLast">–s</span>
+    </div>
+    <div class="dsu-divider"></div>
+    <div class="dsu-row" style="gap:8px;">
+      <button id="autoNow" class="dsu-btn dsu-btn--blue">Jetzt ausführen</button>
+      <button id="autoStop" class="dsu-btn dsu-btn--red">Stopp</button>
+      <button id="autoStart" class="dsu-btn dsu-btn--green">Start</button>
+    </div>
+  `;
+
+  document.body.appendChild(wrap);
+
+  const box = document.getElementById('autoEnabledBox');
+  box.addEventListener('change', e => {
+    autoEnabled = e.target.checked;
+    localStorage.setItem(AUTO_KEY, JSON.stringify(autoEnabled));
+  });
+
+  document.getElementById('autoNow').addEventListener('click', () => runAutoOnce());
+  document.getElementById('autoStop').addEventListener('click', () => { autoEnabled = false; localStorage.setItem(AUTO_KEY, 'false'); box.checked = false; });
+  document.getElementById('autoStart').addEventListener('click', () => { autoEnabled = true; localStorage.setItem(AUTO_KEY, 'true'); box.checked = true; runAutoOnce(); });
+
+  // seconds ticker
+  setInterval(() => {
+    const sec = lastClickTs ? Math.floor((Date.now() - lastClickTs) / 1000) : '–';
+    document.getElementById('autoLast').textContent = sec + 's';
+  }, 1000);
+}
+
 
     // [ADD] Two checkboxes right above the table
     function addOptimizationUI() {
