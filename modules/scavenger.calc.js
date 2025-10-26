@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DS → Scavenger Calculator (Mini Raubzug-Sender)
-// @version      1.0.0
-// @description  Rechner + Füll-Logik (Equal Time / Ressourcen pro Stunde). KEIN Auto-Send.
+// @version      1.1.0
+// @description  Rechner + Füll-Logik (Equal Time / Ressourcen pro Stunde). KEIN Auto-Send. Ignoriert laufende Slots bei der Verteilung.
 // @author       SpeckMich
 // @match        https://*.die-staemme.de/game.php?*&screen=place&mode=scavenge*
 // @run-at       document-idle
@@ -30,6 +30,8 @@
   function numberOfUnlockedSlots() {
     return 4 - jQuery('.lock').length;
   }
+
+  // (legacy) read checkboxes as indices; may include running ones — we now filter later
   function readEnabledSlots() {
     const max = numberOfUnlockedSlots();
     const out = [];
@@ -37,6 +39,47 @@
       if (jQuery(`.checkbox_${i}`).is(':checked')) out.push(i);
     }
     return out;
+  }
+
+  function getEnabledFromStorage() {
+    const raw = storage.getItem('SelectionScavenger');
+    const arr = raw ? JSON.parse(raw) : [1, 1, 1, 1];
+    return [0, 1, 2, 3].map(i => (arr[i] ? 1 : 0));
+  }
+
+  function isSlotRunning(i) {
+    // If the slot shows a return countdown, it's running (ignore for *this* send)
+    return jQuery('.scavenge-option')
+      .eq(i)
+      .find('.active-view .return-countdown').length > 0;
+  }
+
+  function isSlotFree(i) {
+    // Free = has a visible start button (free or premium) and NOT running
+    const $opt = jQuery('.scavenge-option').eq(i);
+    const hasStart =
+      $opt.find('.free_send_button:visible').length > 0 ||
+      $opt.find('.premium_send_button:visible').length > 0;
+    return hasStart && !isSlotRunning(i);
+  }
+
+  function getEligibleSlots() {
+    // Enabled (from storage OR current checkboxes) AND currently free
+    // Prefer live checkboxes (so user edits apply immediately)
+    const max = numberOfUnlockedSlots();
+    const enabledNow = [];
+    for (let i = 0; i < Math.min(4, max); i++) {
+      enabledNow[i] = jQuery(`.checkbox_${i}`).is(':checked') ? 1 : 0;
+    }
+    // Fallback to storage if checkboxes missing
+    const enabledStorage = getEnabledFromStorage();
+
+    const eligible = [];
+    for (let i = 0; i < Math.min(4, max); i++) {
+      const enabledFlag = (enabledNow[i] ?? enabledStorage[i]) ? 1 : 0;
+      if (enabledFlag && isSlotFree(i)) eligible.push(i);
+    }
+    return eligible;
   }
 
   function getTroopAmount() {
@@ -81,12 +124,13 @@
     return res;
   }
 
-  // Equal-time fractions: a_i ∝ 1/ratio_i for enabled slots
-  function computeEqualTimeA(enabledIdx) {
+  // Equal-time fractions: a_i ∝ 1/ratio_i for target slots
+  function computeEqualTimeA(targetIdx) {
     const a = [0, 0, 0, 0];
+    if (targetIdx.length === 1) { a[targetIdx[0]] = 1; return a; }
     let sum = 0;
-    enabledIdx.forEach(i => { a[i] = 1 / RATIOS[i]; sum += a[i]; });
-    if (sum) enabledIdx.forEach(i => { a[i] /= sum; });
+    targetIdx.forEach(i => { a[i] = 1 / RATIOS[i]; sum += a[i]; });
+    if (sum) targetIdx.forEach(i => { a[i] /= sum; });
     return a;
   }
 
@@ -98,38 +142,40 @@
     const denom = Math.pow((load * load) * 100 * (r * r), 0.45) + 1800;
     return (load * r) / denom;
   }
-  function totalRev(iCap, a) {
-    let s = 0; for (let i = 0; i < 4; i++) s += revPerHour(iCap, a[i] || 0, i);
+  function totalRev(iCap, a, targetIdx) {
+    let s = 0;
+    for (const i of targetIdx) s += revPerHour(iCap, a[i] || 0, i);
     return s;
   }
 
-  // Simple coordinate-descent optimizer for perHour
-  function computeOptimalA_PerHour(iCap, enabledIdx) {
+  // Simple coordinate-descent optimizer for perHour over targetIdx
+  function computeOptimalA_PerHour(iCap, targetIdx) {
     const a = [0, 0, 0, 0];
-    if (!enabledIdx.length || iCap <= 0) return a;
+    if (!targetIdx.length || iCap <= 0) return a;
+    if (targetIdx.length === 1) { a[targetIdx[0]] = 1; return a; }
 
-    // init equal over enabled
-    enabledIdx.forEach(i => a[i] = 1 / enabledIdx.length);
+    // init equal over targetIdx
+    targetIdx.forEach(i => a[i] = 1 / targetIdx.length);
 
     let improved = true, guard = 0;
     while (improved && guard++ < 200) {
       improved = false;
-      for (let k = 0; k < enabledIdx.length - 1; k++) {
-        const i = enabledIdx[k], j = enabledIdx[k + 1];
-        const cur = totalRev(iCap, a);
+      for (let k = 0; k < targetIdx.length - 1; k++) {
+        const i = targetIdx[k], j = targetIdx[k + 1];
+        const cur = totalRev(iCap, a, targetIdx);
 
         // move half i → j
         if (a[i] > 0) {
           const di = a[i] * 0.5;
           a[i] -= di; a[j] += di;
-          const v1 = totalRev(iCap, a);
+          const v1 = totalRev(iCap, a, targetIdx);
           if (v1 <= cur) { a[j] -= di; a[i] += di; } else { improved = true; continue; }
         }
         // move half j → i
         if (a[j] > 0) {
           const dj = a[j] * 0.5;
           a[j] -= dj; a[i] += dj;
-          const v2 = totalRev(iCap, a);
+          const v2 = totalRev(iCap, a, targetIdx);
           if (v2 <= cur) { a[i] -= dj; a[j] += dj; } else { improved = true; }
         }
       }
@@ -137,32 +183,42 @@
     return a;
   }
 
-  // Build SendTroops map { unit: [n0,n1,n2,n3] }
+  // Build SendTroops map { unit: [n0,n1,n2,n3] } using only eligible (enabled+free) slots
   function buildPlan() {
-    const enabledIdx = readEnabledSlots();
+    const targetIdx = getEligibleSlots(); // <-- critical filter
+    if (targetIdx.length === 0) return { __none: true };
+
     const troops = getTroopAmount();
     const totalCap = troops.reduce((s, e) => s + (CARRY[e.unit] || 0) * (+e.amount || 0), 0);
 
     const a = (optMode === 'perHour')
-      ? computeOptimalA_PerHour(totalCap, enabledIdx)
-      : computeEqualTimeA(enabledIdx);
+      ? computeOptimalA_PerHour(totalCap, targetIdx)
+      : computeEqualTimeA(targetIdx);
 
     const plan = {};
     troops.forEach(t => { plan[t.unit] = splitByFractions(t.amount, a); });
     return plan;
   }
 
+  // Fill one next eligible slot (from back to front), reveal buttons
   function fillNextSlot(plan) {
-    // Fill the next enabled slot (from back to front), reveal buttons
-    let rzSlots = readOutRZSlotsCB();
-    for (let index = 3; index > -1; index--) {
-      if (rzSlots.charAt(index) !== '1') continue;
+    if (plan && plan.__none) return -1;
+
+    const eligible = getEligibleSlots();
+    if (eligible.length === 0) return -1;
+
+    // Iterate from back to front across eligible indices
+    for (let p = eligible.length - 1; p >= 0; p--) {
+      const index = eligible[p];
+
+      // Double-check right before writing (DOM might have changed)
+      if (!isSlotFree(index)) continue;
 
       const $opt = jQuery('.scavenge-option').eq(index);
-      if ($opt.find('.return-countdown').length) continue;
 
       // set inputs for each unit
-      getTroopAmount().forEach(el => {
+      const troopsNow = getTroopAmount(); // recalc amounts (in case UI changed)
+      troopsNow.forEach(el => {
         const sel = `#scavenge_screen > div > div.candidate-squad-container > table > tbody > tr:nth-child(2) > td:nth-child(${el.value}) > input`;
         const input = document.querySelector(sel);
         if (!input) return;
@@ -179,15 +235,31 @@
       }
       return index;
     }
+
     return -1;
   }
 
+  // --- Visual hint for running slots (editable checkboxes) -------------------
   const style = document.createElement('style');
-style.textContent = `
-  .dsu-slot-running { opacity: .6; outline: 1px dashed #999; }
-`;
-document.head.appendChild(style);
+  style.textContent = `
+    .dsu-slot-running { opacity: .6; outline: 1px dashed #999; }
+  `;
+  document.head.appendChild(style);
 
+  function refreshSlotRunningBadges() {
+    for (let i = 0; i < numberOfUnlockedSlots(); i++) {
+      const $prev = jQuery('.preview').eq(i);
+      const running = $prev.find('.return-countdown').length > 0;
+      const $cb = jQuery(`.checkbox_${i}`);
+      if (!$cb.length) continue;
+      if (running) {
+        $cb.addClass('dsu-slot-running')
+           .attr('title', 'Dieser Slot läuft gerade — deine Auswahl gilt für die nächste Runde.');
+      } else {
+        $cb.removeClass('dsu-slot-running').removeAttr('title');
+      }
+    }
+  }
 
   // --- UI --------------------------------------------------------------------
   function setupUI() {
@@ -201,13 +273,13 @@ document.head.appendChild(style);
 
     // Options block
     const optionsHtml = `
-      <div id="dsu-opt-box" style="margin:6px 0 10px 0;display:flex;gap:18px;align-items:center;">
+      <div style="margin:6px 0 10px 0;display:flex;gap:18px;align-items:center;">
         <label>max. Truppen</label>
         <input class="maxTroops" type="number" min="10" max="100000" value="999999">
         <button class="clearLocalStorage btn">Default löschen</button>
         <button class="saveLocalStorage btn">Default speichern</button>
-        </div>
-        <div id="dsu-opt-box" style="margin:6px 0 10px 0;display:flex;gap:18px;align-items:center;">
+      </div>
+      <div style="margin:6px 0 10px 0;display:flex;gap:18px;align-items:center;">
         <strong>Optimierung:</strong>
         <label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;">
           <input type="checkbox" id="optEqualTime"> Gleiche Dauer
@@ -219,24 +291,21 @@ document.head.appendChild(style);
       </div>`;
     $grid.before(optionsHtml);
 
-    // Slot checkboxes
+    // Slot checkboxes (editable even when running)
     for (let i = 0; i < numberOfUnlockedSlots(); i++) {
       const $prev = jQuery('.preview').eq(i);
       if (!$prev.length) continue;
-if (!jQuery(`.checkbox_${i}`).length) {
-  const running = $prev.find('.return-countdown').length > 0;
-  $prev.before(`<input class="checkbox_${i}" type="checkbox" checked style="margin-left:50%;margin-top:10px;" unit="${i}">`);
-  // No .prop('disabled', true) anymore — keep editable!
-  // Optional: visual hint while running (does not block edits)
-  if (running) {
-    jQuery(`.checkbox_${i}`)
-      .addClass('dsu-slot-running')
-      .attr('title', 'Dieser Slot läuft gerade — deine Auswahl gilt für die nächste Runde.');
-  } else {
-    jQuery(`.checkbox_${i}`).removeClass('dsu-slot-running').removeAttr('title');
-  }
-}
-
+      if (!jQuery(`.checkbox_${i}`).length) {
+        const running = $prev.find('.return-countdown').length > 0;
+        $prev.before(`<input class="checkbox_${i}" type="checkbox" checked style="margin-left:50%;margin-top:10px;" unit="${i}">`);
+        if (running) {
+          jQuery(`.checkbox_${i}`)
+            .addClass('dsu-slot-running')
+            .attr('title', 'Dieser Slot läuft gerade — deine Auswahl gilt für die nächste Runde.');
+        } else {
+          jQuery(`.checkbox_${i}`).removeClass('dsu-slot-running').removeAttr('title');
+        }
+      }
     }
 
     // Unit toggles
@@ -286,6 +355,7 @@ if (!jQuery(`.checkbox_${i}`).length) {
       lastPlan = buildPlan();
       fillNextSlot(lastPlan);
     }, 200));
+
     if (jQuery('.premium_send_button').length) {
       jQuery('.premium_send_button').on('click', () => setTimeout(() => {
         jQuery('.evt-confirm-btn').on('click', () => setTimeout(() => {
@@ -294,10 +364,12 @@ if (!jQuery(`.checkbox_${i}`).length) {
         }, 200));
       }, 200));
     }
+
     refreshSlotRunningBadges();
   }
 
   function readOutRZSlotsCB() {
+    // (kept for compatibility; not used for distribution anymore)
     let level = '';
     for (let i = 0; i < numberOfUnlockedSlots(); i++) {
       level += jQuery(`.checkbox_${i}`).is(':checked') ? '1' : '0';
@@ -320,25 +392,11 @@ if (!jQuery(`.checkbox_${i}`).length) {
     if (selected) {
       const arr = JSON.parse(selected);
       for (let i = 0; i < 4; i++) {
-const cb = jQuery(`.checkbox_${i}`);
-cb.prop('checked', arr[i] == 1); // restore regardless of running state
+        const cb = jQuery(`.checkbox_${i}`);
+        cb.prop('checked', arr[i] == 1); // restore regardless of running state
       }
     }
   }
-
-  function refreshSlotRunningBadges() {
-  for (let i = 0; i < numberOfUnlockedSlots(); i++) {
-    const $prev = jQuery('.preview').eq(i);
-    const running = $prev.find('.return-countdown').length > 0;
-    const $cb = jQuery(`.checkbox_${i}`);
-    if (!$cb.length) continue;
-    if (running) {
-      $cb.addClass('dsu-slot-running').attr('title', 'Dieser Slot läuft gerade — deine Auswahl gilt für die nächste Runde.');
-    } else {
-      $cb.removeClass('dsu-slot-running').removeAttr('title');
-    }
-  }
-}
 
   function setLocalStorage() {
     const temp = [];
@@ -349,11 +407,8 @@ cb.prop('checked', arr[i] == 1); // restore regardless of running state
     storage.setItem('maxScavenger', jQuery('.maxTroops').val() || '');
 
     const sel = [];
-    for (let i = 0; i <= 4; i++) {
-      for (let i = 0; i < 4; i++) {
-  sel.push(jQuery(`.checkbox_${i}`).is(':checked') ? 1 : 0);
-}
-
+    for (let i = 0; i < 4; i++) {
+      sel.push(jQuery(`.checkbox_${i}`).is(':checked') ? 1 : 0);
     }
     storage.setItem('SelectionScavenger', JSON.stringify(sel));
   }
@@ -370,6 +425,15 @@ cb.prop('checked', arr[i] == 1); // restore regardless of running state
     if (document.querySelector('.candidate-squad-widget')) {
       clearInterval(bootIv);
       setupUI();
+
+      // Optional: keep badges in sync if DOM changes
+      const host = document.querySelector('.options-container');
+      if (host) {
+        const mo = new MutationObserver(() => {
+          refreshSlotRunningBadges();
+        });
+        mo.observe(host, { subtree: true, childList: true, characterData: true });
+      }
     }
   }, 50);
 })();
