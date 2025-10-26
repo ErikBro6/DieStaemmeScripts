@@ -185,10 +185,17 @@ runAutoOnce = function () {
         ? computeOptimalA_PerHour(totalCap, enabledIdx)
         : computeEqualTimeA(enabledIdx);
 
-      // [ADD] Split each *unit count* according to 'a' (minimal change)
-      arrayUseableTroops.forEach(element => {
-        SendTroops[element.unit] = splitByFractions(element.amount, a);
-      });
+// OLD:
+// arrayUseableTroops.forEach(element => {
+//   SendTroops[element.unit] = splitByFractions(element.amount, a);
+// });
+
+// NEW:
+const plan = buildSlotPlans(arrayUseableTroops, a, enabledIdx);
+for (const {unit} of arrayUseableTroops) {
+  SendTroops[unit] = plan[unit];
+}
+
 
       Truppenarray = SendTroops;
       startScavenger();
@@ -234,7 +241,9 @@ runAutoOnce = function () {
               $('.scavenge-option').eq(index).find('.free_send_button').css('visibility', "visible");
             }
             getTroopAmount().forEach(element => {
-              let eInput = document.querySelector("#scavenge_screen > div > div.candidate-squad-container > table > tbody > tr:nth-child(2) > td:nth-child(" + element["value"] + ") > input")
+              let eInput = document.querySelector(
+  `.candidate-squad-container input.unitsInput[name="${element.unit}"]`
+);
               eInput.value = Truppenarray[element["unit"]][index];
               let event = new Event('change');
               eInput.dispatchEvent(event);
@@ -280,88 +289,153 @@ runAutoOnce = function () {
     }
 
     // [ADD] Distribute a unit count by fractions a[0..3]
-    function splitByFractions(amount, a) {
-      const res = [0,0,0,0];
-      let assigned = 0;
-      for (let i = 0; i < 4; i++) {
-        const v = Math.floor((amount || 0) * (a[i] || 0));
-        res[i] = v;
-        assigned += v;
-      }
-      // put any remainder into the last enabled slot (if any)
-      const remainder = (amount || 0) - assigned;
-      if (remainder > 0) {
-        for (let i = 3; i >= 0; i--) {
-          if (a[i] > 0) { res[i] += remainder; break; }
-        }
-      }
-      return res;
-    }
+function splitByFractions(amount, a) {
+  const wants  = a.map(x => (amount||0)*(x||0));
+  const res    = wants.map(Math.floor);
+  let rem      = (amount||0) - res.reduce((s,v)=>s+v,0);
+  const order  = [0,1,2,3].sort((i,j)=>(wants[j]-res[j])-(wants[i]-res[i]));
+  for (let t=0; t<rem; t++) res[order[t % order.length]]++;
+  return res;
+}
+
+
 
     // [ADD] Equal-time fractions: a_i ∝ 1/ratio_i for enabled slots
-    function computeEqualTimeA(enabledIdx) {
-      const a = [0,0,0,0];
-      let sum = 0;
-      enabledIdx.forEach(i => { a[i] = 1 / RATIOS[i]; sum += a[i]; });
-      if (sum <= 0) return a;
-      enabledIdx.forEach(i => { a[i] = a[i] / sum; });
-      return a;
-    }
+function computeEqualTimeA(enabled) {
+  const a = [0,0,0,0];
+  let sum = 0;
+  enabled.forEach(i => { a[i] = 1 / RATIOS[i]; sum += a[i]; });
+  if (sum) enabled.forEach(i => a[i] /= sum);
+  return a;
+}
 
-    // [ADD] Resources/hour objective (df cancels for optimization)
-    function revPerHour(iCap, ai, i) {
-      if (ai <= 0) return 0;
-      const r = RATIOS[i];
-      // revenue = (iCap*ai*r) / ( ((iCap*ai)^2 * 100 * r^2) ^0.45 + 1800 )
-      const load = iCap * ai;
-      const denom = Math.pow((load*load) * 100 * (r*r), 0.45) + 1800;
-      return (load * r) / denom;
-    }
 
-    // [ADD] Evaluate total revenue for vector a
-    function totalRev(iCap, a) {
-      let s = 0;
-      for (let i = 0; i < 4; i++) s += revPerHour(iCap, a[i] || 0, i);
-      return s;
-    }
+
+
+function revPerHour(iCap, ai, i) {
+  if (ai <= 0) return 0;
+  const r = RATIOS[i];
+  const load  = iCap * ai;
+  const denom = Math.pow((load*load) * 100 * (r*r), 0.45) + 1800; // df cancels for choosing a
+  return (load * r) / denom;
+}
+
+function totalRev(iCap, a) {
+  let s = 0; for (let i=0;i<4;i++) s += revPerHour(iCap, a[i]||0, i); return s;
+}
+
 
     // [ADD] Optimize a over enabled by simple coordinate-descent (adjacent transfers)
-    function computeOptimalA_PerHour(iCap, enabledIdx) {
-      const a = [0,0,0,0];
-      if (!enabledIdx.length || iCap <= 0) return a;
+   function computeOptimalA_PerHour(iCap, enabled) {
+  const a = [0,0,0,0];
+  if (!enabled.length || iCap <= 0) return a;
+  enabled.forEach(i => a[i] = 1/enabled.length);
 
-      // init equal over enabled
-      enabledIdx.forEach(i => a[i] = 1 / enabledIdx.length);
+  const pairs = [];
+  for (let x=0;x<enabled.length;x++)
+    for (let y=x+1;y<enabled.length;y++)
+      pairs.push([enabled[x], enabled[y]]);
 
-      let improved = true;
-      let guard = 0;
-      while (improved && guard++ < 200) {
-        improved = false;
-        for (let k = 0; k < enabledIdx.length - 1; k++) {
-          const i = enabledIdx[k], j = enabledIdx[k+1];
+  let step = 0.5, guard = 0;
+  while (step > 1e-4 && guard++ < 400) {
+    let improved = false, cur = totalRev(iCap, a);
+    for (const [i,j] of pairs) {
+      if (a[i] > 0) {
+        const di = Math.min(a[i], step);
+        a[i]-=di; a[j]+=di;
+        const v = totalRev(iCap, a);
+        if (v > cur) { cur = v; improved = true; continue; }
+        a[i]+=di; a[j]-=di; // revert
+      }
+      if (a[j] > 0) {
+        const dj = Math.min(a[j], step);
+        a[j]-=dj; a[i]+=dj;
+        const v = totalRev(iCap, a);
+        if (v > cur) { cur = v; improved = true; continue; }
+        a[j]+=dj; a[i]-=dj;
+      }
+    }
+    if (!improved) step *= 0.5;
+  }
+  return a;
+}
 
-          const cur = totalRev(iCap, a);
+// Build per-slot unit plan that matches desired capacity per slot
+function buildSlotPlans(arrayUseableTroops, a, enabledIdx) {
+  // --- targets (capacity) per slot from a[i] ---
+  const totalCap = arrayUseableTroops.reduce(
+    (s,e)=> s + (CARRY[e.unit]||0) * (+(e.amount)||0), 0
+  );
+  const targets = [0,0,0,0];
+  enabledIdx.forEach(i => targets[i] = Math.round((a[i]||0) * totalCap));
+  const remCap = targets.slice();
 
-          // move half of i -> j
-          if (a[i] > 0) {
-            const di = a[i] * 0.5;
-            a[i] -= di; a[j] += di;
-            const v1 = totalRev(iCap, a);
-            // revert if worse
-            if (v1 <= cur) { a[j] -= di; a[i] += di; } else { improved = true; continue; }
-          }
+  // --- plan init ---
+  const plan = {}; // plan[unit] = [n0,n1,n2,n3]
+  arrayUseableTroops.forEach(e => plan[e.unit] = [0,0,0,0]);
 
-          // move half of j -> i
-          if (a[j] > 0) {
-            const dj = a[j] * 0.5;
-            a[j] -= dj; a[i] += dj;
-            const v2 = totalRev(iCap, a);
-            if (v2 <= cur) { a[i] -= dj; a[j] += dj; } else { improved = true; }
-          }
+  // --- deterministic orders to mimic calculator style ---
+  // slots: lowest ratio first (FF=0, BB=1, SS=2, RR=3)
+  const slotOrder = enabledIdx.slice().sort((i,j)=> RATIOS[i] - RATIOS[j]);
+  // units: lowest carry first (sword 15 before spear 25, etc.)
+  const unitList = arrayUseableTroops.slice().sort(
+    (a,b)=> (CARRY[a.unit]||0) - (CARRY[b.unit]||0)
+  );
+
+  // --- primary assignment: push low-carry into low-ratio first ---
+  for (const {unit, amount} of unitList) {
+    const c = CARRY[unit] || 0;
+    let left = +amount || 0;
+    // cycle through slots in slotOrder, always picking the one with the biggest remaining need
+    while (left > 0) {
+      // choose the lowest-ratio slot with the highest remaining capacity need
+      let best = -1, bestNeed = -1;
+      for (const i of slotOrder) {
+        if (remCap[i] > bestNeed) { bestNeed = remCap[i]; best = i; }
+      }
+      if (best < 0 || bestNeed <= 0) break;
+      plan[unit][best] += 1;
+      remCap[best] -= c;
+      left -= 1;
+    }
+    // if we still have leftovers (all remCap <= 0), just place them in the best-fitting low-ratio slot
+    while (left > 0) {
+      const i = slotOrder[0];
+      plan[unit][i] += 1;
+      remCap[i] -= c;
+      left -= 1;
+    }
+  }
+
+  // --- gentle balancing: move one unit from the most negative to the most positive if it reduces error ---
+  let guard = 0;
+  while (guard++ < 200) {
+    let p=-1,n=-1,pv=-Infinity,nv=Infinity;
+    for (const i of enabledIdx) { if (remCap[i]>pv){pv=remCap[i];p=i;} if (remCap[i]<nv){nv=remCap[i];n=i;} }
+    if (pv <= 0 || nv >= 0) break;
+    let improved = false;
+
+    // try moving a unit that exists in 'n' to 'p'
+    // prefer moving higher-carry units first (to adjust capacity quickly)
+    for (const {unit} of arrayUseableTroops.slice().sort((a,b)=> (CARRY[b.unit]||0)-(CARRY[a.unit]||0))) {
+      const c = CARRY[unit]||0;
+      if (plan[unit][n] > 0) {
+        const before = Math.abs(remCap[p]) + Math.abs(remCap[n]);
+        const after  = Math.abs(remCap[p]-c) + Math.abs(remCap[n]+c);
+        if (after < before) {
+          plan[unit][n]--; plan[unit][p]++;
+          remCap[p]-=c; remCap[n]+=c;
+          improved = true; break;
         }
       }
-      return a;
     }
+    if (!improved) break;
+  }
+
+  return plan; // { unit: [FF,BB,SS,RR] counts }
+}
+
+
 
     function setupUI() {
       $(".border-frame-gold-red").css("padding-bottom", "10px");

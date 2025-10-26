@@ -1,40 +1,41 @@
 {
-  "modules": {
-    "assetsBase": "https://cdn.jsdelivr.net/gh/ErikBro6/DieStaemmeScripts@master",
+  "baseUrl": "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master",
+  "assetsBase": "https://cdn.jsdelivr.net/gh/ErikBro6/DieStaemmeScripts@master",
+  "routes": {
     "place": [
-      "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/config/assetsBase.js",
-      "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/ui/toggleButton.js",
-      "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/ui/datePicker.js",
-      "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/confirmEnhancer.js",
-      "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/autoSender.js",
-      "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/massSupporter.js",
-      "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/autoScavenge.js"
+      { "url": "config/assetsBase.js", "id": "assetsBase", "title": "Assets-Basis", "desc": "Grund-Styles & Assets für DS-Tools." },
+      { "url": "ui/toggleButton.js", "id": "toggleButton", "title": "Toggle-Button", "desc": "Schalter zum schnellen Ein-/Ausschalten von Modulen." },
+      { "url": "ui/datePicker.js", "id": "datePicker", "title": "Datumswähler", "desc": "Kleines UI-Widget für Datums-/Zeitwahl." },
+      { "url": "modules/confirmEnhancer.js", "id": "confirmEnhancer", "title": "Bestätigungs-Booster", "desc": "Verbessert Bestätigungs-Dialoge am Platz." },
+      { "url": "modules/autoSender.js", "id": "autoSender", "title": "Auto-Sender", "desc": "Automatisierte Sende-Flows." },
+      { "url": "modules/massSupporter.js", "id": "massSupporter", "title": "Massen-Unterstützer", "desc": "Viele Dörfer schnell unterstützen."},
+      { "url": "modules/autoScavenge.js", "id": "autoScavenge", "title": "Auto-Raubzug", "desc": "Automatisches Scavenging / Raubzüge." }
     ],
     "map": [
-      "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/config/assetsBase.js",
-      "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/ui/toggleButton.js",
-      "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/ui/datePicker.js",
-      "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/confirmEnhancer.js",
-      "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/lineMap.js",
-      "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/tooltip.js",
-      "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/pickVillages.js"
+      { "url": "config/assetsBase.js", "id": "assetsBaseMap", "title": "Assets-Basis (Karte)", "desc": "Grund-Styles/Assets für Kartentools." },
+      { "url": "ui/toggleButton.js", "id": "toggleButtonMap", "title": "Toggle-Button (Karte)", "desc": "Schalter auf Kartenseiten." },
+      { "url": "ui/datePicker.js", "id": "datePickerMap", "title": "Datumswähler (Karte)", "desc": "Widget für Datums-/Zeitwahl auf der Karte." },
+      { "url": "modules/confirmEnhancer.js", "id": "confirmEnhancerMap", "title": "Bestätigungs-Booster (Karte)", "desc": "Dialog-Verbesserungen auf der Karte." },
+      { "url": "modules/lineMap.js", "id": "lineMap", "title": "Linien auf Karte", "desc": "Zeichnet Verbindungen/Markierungen." },
+      { "url": "modules/tooltip.js", "id": "tooltip", "title": "Tooltips+", "desc": "Erweiterte Tooltip-Infos auf der Karte." },
+      { "url": "modules/pickVillages.js", "id": "pickVillages", "title": "Dörfer wählen", "desc": "Schnellauswahl von Zieldörfern direkt auf der Karte." }
     ],
-    "overview_villages": "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/overviewCombined.js",
+    "overview_villages": { "url": "modules/overviewCombined.js", "id": "overviewCombined", "title": "Übersicht: Kombiniert+", "desc": "Mehr Spalten, Filter & Komfortfunktionen." },
     "market": {
-      "resource_balancer": "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/resBalancer.js",
-      "default": "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/menu/resBalancerMenuPoint.js"
+      "resource_balancer": { "url": "modules/resBalancer.js", "id": "resBalancer", "title": "Ressourcen-Balancer", "desc": "Gleicht Lagerstände zwischen Dörfern aus." },
+      "default": { "url": "menu/resBalancerMenuPoint.js", "id": "resBalancerMenu", "title": "Market-Menüpunkt", "desc": "Menüeintrag/Integration für den Balancer." }
     },
     "attackPlannerEdit": [
-      "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/dsUltimateTimingSaver.js",
-      "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/dsUltimateAutoSender.js"
+      { "url": "modules/dsUltimateTimingSaver.js", "id": "timingSaver", "title": "Timing Saver", "desc": "Speichert/übernimmt Angriffs-Timings." },
+      { "url": "modules/dsUltimateAutoSender.js", "id": "ultimateAutoSender", "title": "Ultimate Auto-Sender", "desc": "Automation für DS-Ultimate Planner."}
     ],
-    "info_player": "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/playerInfoTools.js",
-    "info_village": "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/singleVillageSnipe.js",
-    "info_ally": "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/tribeStats.js",
+    "info_player": { "url": "modules/playerInfoTools.js", "id": "playerInfoTools", "title": "Spieler-Info Tools", "desc": "Hilfstools auf Spielerseiten." },
+    "info_village": { "url": "modules/singleVillageSnipe.js", "id": "singleVillageSnipe", "title": "Snipe (Einzeldorf)", "desc": "Schnelles Snipen direkt von der Dorfinfoseite." },
+    "info_ally": { "url": "modules/tribeStats.js", "id": "tribeStats", "title": "Stammes-Statistiken", "desc": "ODA/ODD/ODS & weitere Kennzahlen." },
     "main": [
-        "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/config/assetsBase.js",
-        "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/softBuildQueue.js",
-        "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/modules/buildHelper.js"
+      { "url": "config/assetsBase.js", "id": "assetsBaseMain", "title": "Assets-Basis (Hauptgebäude)", "desc": "Grund-Styles auf der Hauptgebäude-Seite." },
+      { "url": "modules/softBuildQueue.js", "id": "softBuildQueue", "title": "Soft-Bauqueue", "desc": "„Soft“-Aufträge direkt in der echten Queue anzeigen." },
+      { "url": "modules/buildHelper.js", "id": "buildHelper", "title": "Bau-Helfer", "desc": "Smarte Hilfen beim Ausbau der Gebäude." }
     ]
   }
 }
