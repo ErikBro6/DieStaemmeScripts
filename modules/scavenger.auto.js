@@ -172,17 +172,16 @@
     addToggleUI();
     installScavengeObserver();
 
-    if (!autoIv) {
-      autoIv = setInterval(runAutoOnce, AUTO_INTERVAL_MS);
-      setTimeout(runAutoOnce, 800); // quick first run
-    }
+  const _oldRun = runAutoOnce;
+  runAutoOnce = function () {
+    _oldRun();
+    setTimeout(scheduleNextReload, 1500);
+  };
 
-    // If we just clicked things, reschedule reload a bit later
-    const _oldRun = runAutoOnce;
-    // eslint-disable-next-line no-func-assign
-    runAutoOnce = function () {
-      _oldRun();
-      setTimeout(scheduleNextReload, 1500);
-    };
+  if (!autoIv) {
+    autoIv = setInterval(runAutoOnce, AUTO_INTERVAL_MS);
+    setTimeout(runAutoOnce, 800);
+  }
+
   });
 })();
