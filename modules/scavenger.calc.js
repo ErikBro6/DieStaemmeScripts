@@ -182,6 +182,13 @@
     return -1;
   }
 
+  const style = document.createElement('style');
+style.textContent = `
+  .dsu-slot-running { opacity: .6; outline: 1px dashed #999; }
+`;
+document.head.appendChild(style);
+
+
   // --- UI --------------------------------------------------------------------
   function setupUI() {
     jQuery('.border-frame-gold-red').css('padding-bottom', '10px');
@@ -216,12 +223,20 @@
     for (let i = 0; i < numberOfUnlockedSlots(); i++) {
       const $prev = jQuery('.preview').eq(i);
       if (!$prev.length) continue;
-      if (!jQuery(`.checkbox_${i}`).length) {
-        $prev.before(`<input class="checkbox_${i}" type="checkbox" checked style="margin-left:50%;margin-top:10px;" unit="${i}">`);
-        if ($prev.find('.return-countdown').length) {
-          jQuery(`.checkbox_${i}`).prop('disabled', true).prop('checked', false);
-        }
-      }
+if (!jQuery(`.checkbox_${i}`).length) {
+  const running = $prev.find('.return-countdown').length > 0;
+  $prev.before(`<input class="checkbox_${i}" type="checkbox" checked style="margin-left:50%;margin-top:10px;" unit="${i}">`);
+  // No .prop('disabled', true) anymore — keep editable!
+  // Optional: visual hint while running (does not block edits)
+  if (running) {
+    jQuery(`.checkbox_${i}`)
+      .addClass('dsu-slot-running')
+      .attr('title', 'Dieser Slot läuft gerade — deine Auswahl gilt für die nächste Runde.');
+  } else {
+    jQuery(`.checkbox_${i}`).removeClass('dsu-slot-running').removeAttr('title');
+  }
+}
+
     }
 
     // Unit toggles
@@ -279,6 +294,7 @@
         }, 200));
       }, 200));
     }
+    refreshSlotRunningBadges();
   }
 
   function readOutRZSlotsCB() {
@@ -304,11 +320,25 @@
     if (selected) {
       const arr = JSON.parse(selected);
       for (let i = 0; i < 4; i++) {
-        const cb = jQuery(`.checkbox_${i}`);
-        cb.prop('checked', arr[i] == 1 && !cb.is(':disabled'));
+const cb = jQuery(`.checkbox_${i}`);
+cb.prop('checked', arr[i] == 1); // restore regardless of running state
       }
     }
   }
+
+  function refreshSlotRunningBadges() {
+  for (let i = 0; i < numberOfUnlockedSlots(); i++) {
+    const $prev = jQuery('.preview').eq(i);
+    const running = $prev.find('.return-countdown').length > 0;
+    const $cb = jQuery(`.checkbox_${i}`);
+    if (!$cb.length) continue;
+    if (running) {
+      $cb.addClass('dsu-slot-running').attr('title', 'Dieser Slot läuft gerade — deine Auswahl gilt für die nächste Runde.');
+    } else {
+      $cb.removeClass('dsu-slot-running').removeAttr('title');
+    }
+  }
+}
 
   function setLocalStorage() {
     const temp = [];
@@ -320,7 +350,10 @@
 
     const sel = [];
     for (let i = 0; i <= 4; i++) {
-      sel.push(jQuery(`.checkbox_${i}`).is(':checked') ? 1 : 0);
+      for (let i = 0; i < 4; i++) {
+  sel.push(jQuery(`.checkbox_${i}`).is(':checked') ? 1 : 0);
+}
+
     }
     storage.setItem('SelectionScavenger', JSON.stringify(sel));
   }
