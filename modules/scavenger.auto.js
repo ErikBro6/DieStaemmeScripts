@@ -1,188 +1,188 @@
 // ==UserScript==
-// @name         DS → Scavenger Auto (Button only, safe delay)
-// @version      1.2.0
-// @description  Ein einziger Auto-Button: periodisch planen+füllen+klicken (free) mit harter 1 s Sicherheits-Delay zwischen ALLEN Aktionen. Benötigt DS → Scavenger Calculator.
+// @name         DS → Scavenger Auto (safe timing, split-friendly)
+// @version      2.1.0
+// @description  Auto plan/fill via DSScavenger + sequential start clicks with safe delays. Robust reload right after returns hit 00:00:00.
 // @author       SpeckMich
 // @match        https://*.die-staemme.de/game.php?*&screen=place&mode=scavenge*
 // @run-at       document-idle
 // ==/UserScript==
 
+/* global $, jQuery */
 (function () {
   'use strict';
 
-  /* ---------- config ---------- */
-  const AUTO_KEY          = 'dsu_scavenger_auto_enabled';
-  const AUTO_INTERVAL_MS  = 30_000;   // periodische Runde
-  const STEP_DELAY_MS     = 1000;     // Harter Delay zwischen JEDEM Aktionsschritt
-  const POST_FINISH_DELAY = 1500;     // kleiner Sicherheitspuffer vor Reload
-  const MAX_REASONABLE_MS = 8 * 3600_000;
+  // --------- Settings ----------
+  const AUTO_KEY             = 'dsu_scavenger_auto_enabled';
+  const AUTO_INTERVAL_MS     = 30_000;    // run planner every 30s
+  const STEP_DELAY_MS        = 1000;      // 1s between start-button clicks
+  const POST_FINISH_DELAY_MS = 1500;      // extra wait after 00:00:00 before reload
+  const REFRESH_JITTER_MS    = 1200;      // reload ~1.2s after 00:00:00
+  const MAX_REASONABLE_MS    = 8 * 3600_000;
 
-  /* ---------- tiny utils ---------- */
-  const sleep = (ms) => new Promise(res => setTimeout(res, ms));
+  // --------- State ------------
+  let autoEnabled = JSON.parse(localStorage.getItem(AUTO_KEY) || 'true');
+  let autoIv      = null;
+  let autoBusy    = false;
+  let lastClickTs = 0;
+  let refreshTmo  = null;
 
-  function isVisible(el) {
-    if (!el) return false;
-    if (el.offsetParent === null) return false;
-    const cs = getComputedStyle(el);
-    return cs.visibility !== 'hidden' && cs.opacity !== '0';
-  }
+  // --------- Helpers ----------
+  const $docReady = (fn) => (document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', fn) : fn());
+  const now = () => Date.now();
 
-  function parseHMS(t) {
-    const m = String(t||'').trim().match(/^(\d+):(\d{2}):(\d{2})$/);
+  function parseHMS(text) {
+    const m = String(text || '').trim().match(/^(\d+):(\d{2}):(\d{2})$/);
     if (!m) return null;
-    return (+m[1])*3600 + (+m[2])*60 + (+m[3]);
+    const h = +m[1], mi = +m[2], s = +m[3];
+    return h*3600 + mi*60 + s;
   }
 
   function getMinCountdownMs() {
-    let min=null;
-    document.querySelectorAll('.scavenge-option .active-view .return-countdown').forEach(el=>{
-      const sec=parseHMS(el.textContent);
-      if(sec==null)return;
-      if(min==null||sec<min)min=sec;
+    let minSec = null;
+    jQuery('.scavenge-option .active-view .return-countdown').each(function () {
+      const sec = parseHMS(jQuery(this).text());
+      if (sec == null) return;
+      if (minSec == null || sec < minSec) minSec = sec;
     });
-    if(min==null)return null;
-    const ms=(min*1000)+STEP_DELAY_MS;
-    if(ms<=0||ms>MAX_REASONABLE_MS)return null;
+    if (minSec == null) return null;
+    const ms = (minSec * 1000) + REFRESH_JITTER_MS;
+    if (ms <= 0 || ms > MAX_REASONABLE_MS) return null;
     return ms;
   }
 
-  function forceReload() {
+  function forceReload(cacheBust = true) {
     try {
       const url = new URL(location.href);
-      url.searchParams.set('_tmr', Date.now());
+      if (cacheBust) url.searchParams.set('_tmr', Date.now());
       location.replace(url.toString());
     } catch {
       location.href = location.href;
     }
   }
 
-  /* ---------- global action queue (1 s between ALL actions) ---------- */
-  let queue = Promise.resolve();
-  function perform(label, fn) {
-    // every action waits STEP_DELAY_MS from the previous action, then runs, then waits again
-    queue = queue
-      .then(() => sleep(STEP_DELAY_MS))
-      .then(async () => {
-        try { await fn(); } catch (e) { console.warn('[ScavengerAuto]', label, 'error:', e); }
-      })
-      .then(() => sleep(STEP_DELAY_MS));
-    return queue;
-  }
-
-  /* ---------- state ---------- */
-  let autoEnabled = JSON.parse(localStorage.getItem(AUTO_KEY) || 'false');
-  let runningLoop = false;
-  let cancelLoop  = false;
-  let reloadTmo   = null;
-
   function scheduleNextReload() {
-    if (reloadTmo) clearTimeout(reloadTmo);
+    if (refreshTmo) { clearTimeout(refreshTmo); refreshTmo = null; }
     const ms = getMinCountdownMs();
     if (ms == null) return;
-
-    reloadTmo = setTimeout(async () => {
-      const recheck = getMinCountdownMs();
-      if (recheck != null && recheck > 2500) { scheduleNextReload(); return; }
-      await sleep(POST_FINISH_DELAY);
-      // reload also goes through the queue → 1s spacing is honored
-      await perform('reload', () => forceReload());
+    refreshTmo = setTimeout(() => {
+      // recheck to avoid too-early reload if DOM just changed
+      const again = getMinCountdownMs();
+      if (again != null && again > 2500) {
+        scheduleNextReload();
+        return;
+      }
+      setTimeout(() => forceReload(true), POST_FINISH_DELAY_MS);
     }, ms);
   }
 
-  /* ---------- core ---------- */
-  async function clickVisibleFreeButtonsBackToFront() {
-    const all = Array.from(document.querySelectorAll('.scavenge-option .free_send_button'));
-    const visible = all.filter(isVisible);
-
-    for (let i = visible.length - 1; i >= 0; i--) {
-      const btn = visible[i];
-      if (!isVisible(btn)) continue;
-      await perform('click send', () => btn.click());
-    }
+  function debounce(fn, wait) {
+    let t = null;
+    return () => { if (t) clearTimeout(t); t = setTimeout(fn, wait); };
   }
 
-  async function runAutoOnce() {
-    if (!autoEnabled) return;
-    if (!window.DSScavenger || !window.DSScavenger.isReady()) return;
+  function installScavengeObserver() {
+    const host = document.querySelector('.options-container');
+    if (!host) return;
+    const reschedule = debounce(scheduleNextReload, 200);
 
-    // compute + fill next slot (queued)
-    await perform('computeAndFillNext', () => window.DSScavenger.computeAndFillNext());
-
-    // click visible send buttons (each click queued with 1s gap)
-    await clickVisibleFreeButtonsBackToFront();
-
-    // re-schedule reload (queued gap included)
-    await perform('scheduleNextReload', () => scheduleNextReload());
-  }
-
-  async function loop() {
-    if (runningLoop) return;
-    runningLoop = true;
-    cancelLoop  = false;
-
-    // do an immediate cycle first
-    await runAutoOnce();
-
-    while (!cancelLoop && autoEnabled) {
-      // Wait the cycle interval in queue to avoid overlapping with other actions
-      await perform('cycle-wait', () => Promise.resolve());
-      await sleep(AUTO_INTERVAL_MS);
-      if (!autoEnabled || cancelLoop) break;
-      await runAutoOnce();
-    }
-
-    runningLoop = false;
-  }
-
-  /* ---------- UI ---------- */
-  function ensureButton() {
-    if (document.getElementById('dsu-auto-toggle')) return;
-
-    const btn = document.createElement('button');
-    btn.id = 'dsu-auto-toggle';
-    btn.textContent = autoEnabled ? 'Auto Raubzug: AN' : 'Auto Raubzug: AUS';
-    Object.assign(btn.style, {
-      position: 'fixed',
-      right: '20px',
-      bottom: '50px',
-      zIndex: 9999,
-      padding: '8px 12px',
-      fontWeight: 'bold',
-      borderRadius: '8px',
-      border: '0',
-      color: '#fff',
-      background: autoEnabled ? '#4CAF50' : '#f44336',
-      boxShadow: '0 2px 10px rgba(0,0,0,.2)',
-      cursor: 'pointer'
-    });
-
-    btn.addEventListener('click', async () => {
-      autoEnabled = !autoEnabled;
-      localStorage.setItem(AUTO_KEY, JSON.stringify(autoEnabled));
-      btn.textContent = autoEnabled ? 'Auto Raubzug: AN' : 'Auto Raubzug: AUS';
-      btn.style.background = autoEnabled ? '#4CAF50' : '#f44336';
-
-      if (autoEnabled) {
-        cancelLoop = false;
-        loop(); // fire-and-forget
-      } else {
-        cancelLoop = true;
+    const mo = new MutationObserver((mutList) => {
+      for (const m of mutList) {
+        if (m.type === 'characterData') { reschedule(); return; }
+        if (m.type === 'childList') {
+          const changed = [...m.addedNodes, ...m.removedNodes].some(n =>
+            n.nodeType === 1 && (
+              n.matches?.('.active-view, .return-countdown, .free_send_button, .premium_send_button') ||
+              n.querySelector?.('.active-view, .return-countdown, .free_send_button, .premium_send_button')
+            )
+          );
+          if (changed) { reschedule(); return; }
+        }
+        if (m.type === 'attributes' && m.target?.classList?.contains('return-countdown')) {
+          reschedule(); return;
+        }
       }
     });
 
-    document.body.appendChild(btn);
-  }
-
-  /* ---------- boot ---------- */
-  function boot() {
-    ensureButton();
-    if (autoEnabled) loop();
+    mo.observe(host, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['class'] });
     scheduleNextReload();
+    setInterval(scheduleNextReload, 30_000); // fail-safe
   }
 
-  if (document.readyState === 'complete' || document.readyState === 'interactive') {
-    boot();
-  } else {
-    window.addEventListener('DOMContentLoaded', boot, { once: true });
+  // --------- UI ----------
+  function addToggleUI() {
+    if (document.getElementById('dsu-auto-toggle')) return;
+    const box = jQuery(`
+      <div id="dsu-auto-toggle" style="
+        position:fixed;right:10px;bottom:50px;z-index:9999;
+        background:#222;color:#fff;padding:8px 10px;border-radius:8px;
+        box-shadow:0 4px 18px rgba(0,0,0,.3);font:12px system-ui;display:flex;align-items:center;gap:8px;">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+          <input id="autoEnabledBox" type="checkbox" ${autoEnabled ? 'checked' : ''}>
+          Auto Raubzug
+        </label>
+        <span id="autoLast" style="opacity:.8"></span>
+      </div>
+    `);
+    jQuery('body').append(box);
+    jQuery('#autoEnabledBox').on('change', function () {
+      autoEnabled = jQuery(this).is(':checked');
+      localStorage.setItem(AUTO_KEY, JSON.stringify(autoEnabled));
+    });
+    setInterval(() => {
+      const sec = lastClickTs ? Math.floor((now() - lastClickTs) / 1000) : '–';
+      jQuery('#autoLast').text(sec + 's');
+    }, 1000);
   }
+
+  // --------- Auto flow (uses calc module) ----------
+  function runAutoOnce() {
+    if (!autoEnabled || autoBusy) return;
+    const API = window.DSScavenger;
+    if (!API || typeof API.isReady !== 'function' || !API.isReady()) return; // wait for calc module to boot
+
+    autoBusy = true;
+    try {
+      // compute + fill next slot (no clicking done by calc)
+      const slotIdx = API.computeAndFillNext?.();
+      // If nothing to fill, we’re done
+      if (slotIdx == null || slotIdx === -1) { autoBusy = false; return; }
+
+      lastClickTs = now();
+
+      // After a short wait, click all visible free start buttons from bottom to top with 1s spacing
+      setTimeout(() => {
+        const $starts = jQuery('.scavenge-option .free_send_button:visible');
+        let idx = $starts.length - 1;
+        (function clickNext() {
+          if (idx < 0) { autoBusy = false; return; }
+          const $btn = $starts.eq(idx);
+          if ($btn && $btn.length) $btn.trigger('click');
+          idx--;
+          setTimeout(clickNext, STEP_DELAY_MS);
+        })();
+      }, STEP_DELAY_MS);
+    } catch (e) {
+      autoBusy = false;
+      // optional: console.warn(e);
+    }
+  }
+
+  // --------- Boot ----------
+  $docReady(() => {
+    addToggleUI();
+    installScavengeObserver();
+
+    if (!autoIv) {
+      autoIv = setInterval(runAutoOnce, AUTO_INTERVAL_MS);
+      setTimeout(runAutoOnce, 800); // quick first run
+    }
+
+    // If we just clicked things, reschedule reload a bit later
+    const _oldRun = runAutoOnce;
+    // eslint-disable-next-line no-func-assign
+    runAutoOnce = function () {
+      _oldRun();
+      setTimeout(scheduleNextReload, 1500);
+    };
+  });
 })();
