@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SpeckMichs Die Stämme Tool Collection
 // @namespace    https://github.com/deinname/ds-tools
-// @version      3.0.14
+// @version      3.0.15
 // @description  Erweitert die Die Stämme Erfahrung mit einigen Tools und Skripten
 // @author       SpeckMich
 // @connect      raw.githubusercontent.com
@@ -366,34 +366,56 @@ const scoped = (ctx.mode !== "call")
    *  Module metadata + IDs
    *  --------------------------------------*/
 
-  // If a manifest (or CONFIG) provides strings, we’ll wrap them into objects.
-  // Normalized entry shape:
-  // { url: string, id: string, title: string, desc?: string, defaultEnabled?: boolean }
-  function fileNameFromUrl(u){ try{ return (u.split('?')[0]||'').split('/').pop()||u; }catch{ return u; } }
-  function defaultIdFromUrl(u){ return fileNameFromUrl(u).replace(/\.[a-z]+$/i,''); }
-  function defaultTitleFromUrl(u){
-    const f = defaultIdFromUrl(u).replace(/[-_]/g,' ');
-    return f.charAt(0).toUpperCase()+f.slice(1);
+// --- Title helpers ----------------------------------------------------------
+function fileNameFromUrl(u){
+  try { return (u.split('?')[0]||'').split('/').pop() || u; } catch { return u; }
+}
+function defaultIdFromUrl(u){
+  return fileNameFromUrl(u).replace(/\.[a-z0-9]+$/i,'');
+}
+function prettyFromId(id){
+  // drop common prefixes
+  let s = id.replace(/^(dsu(?:ltimate)?|ds|tw)/i, '');
+  // split camelCase and dashes/underscores
+  s = s.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[-_]+/g, ' ').trim();
+  // compact multiple spaces
+  s = s.replace(/\s{2,}/g, ' ');
+  // capitalize
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+function defaultTitleFromUrl(u){
+  return prettyFromId(defaultIdFromUrl(u));
+}
+function sanitizeTitle(maybeTitle, url){
+  // If a title accidentally contains a URL/host, ignore it and derive from filename
+  if (!maybeTitle || /^(?:[a-z]+:)?\/\//i.test(maybeTitle)) {
+    return defaultTitleFromUrl(url);
   }
+  return maybeTitle;
+}
 
-  function normalizeModuleEntry(v){
-    if (!v) return null;
-    if (typeof v === "string") {
-      const url = v;
-      return { url, id: defaultIdFromUrl(url), title: defaultTitleFromUrl(url) };
-    }
-    if (typeof v === "object" && typeof v.url === "string") {
-      const url = v.url;
-      return {
-        url,
-        id: v.id || defaultIdFromUrl(url),
-        title: v.title || defaultTitleFromUrl(url),
-        desc: v.desc || "",
-        defaultEnabled: v.defaultEnabled !== false // default ON
-      };
-    }
-    return null;
+
+function normalizeModuleEntry(v){
+  if (!v) return null;
+  if (typeof v === "string") {
+    const url = v;
+    return { url, id: defaultIdFromUrl(url), title: defaultTitleFromUrl(url) };
   }
+  if (typeof v === "object" && typeof v.url === "string") {
+    const url = v.url;
+    const rawTitle = v.title || "";
+    const title = sanitizeTitle(rawTitle, url);
+    return {
+      url,
+      id: v.id || defaultIdFromUrl(url),
+      title,
+      desc: v.desc || "",
+      defaultEnabled: v.defaultEnabled !== false
+    };
+  }
+  return null;
+}
+
 
 
   /** ---------------------------------------
@@ -433,20 +455,31 @@ const scoped = (ctx.mode !== "call")
     });
   }
 
-  function modulesFromManifest(manifest) {
-    if (manifest.modules) return manifest.modules;
-    if (manifest.baseUrl && manifest.routes) {
-      const base = manifest.baseUrl.replace(/\/$/, "");
-      const mapVal = v => Array.isArray(v) ? v.map(mapVal)
-        : (typeof v === "string"
-            ? (base + "/" + v.replace(/^\//, ""))
-            : (v && typeof v === "object"
-                ? Object.fromEntries(Object.entries(v).map(([k, val]) => [k, mapVal(val)]))
-                : v));
-      return mapVal(manifest.routes);
-    }
-    throw new Error("Ungültiges Manifest");
+function modulesFromManifest(manifest) {
+  if (manifest.modules) return manifest.modules;
+
+  if (manifest.baseUrl && manifest.routes) {
+    const base = manifest.baseUrl.replace(/\/$/, "");
+
+    const mapVal = (key, val) => {
+      if (Array.isArray(val)) return val.map(v => mapVal(key, v));
+      if (val && typeof val === "object") {
+        return Object.fromEntries(Object.entries(val).map(([k, v]) => [k, mapVal(k, v)]));
+      }
+      if (typeof val === "string") {
+        // Only prefix the actual module URL field
+        if (key === "url") return base + "/" + val.replace(/^\//, "");
+        return val; // titles/descriptions stay untouched
+      }
+      return val;
+    };
+
+    return mapVal(null, manifest.routes);
   }
+
+  throw new Error("Ungültiges Manifest");
+}
+
 
 async function bootstrap() {
   const env = await getEnv();

@@ -31,7 +31,7 @@ win.TWLD_continents = 16;
 
 // import data from website
 win.TWLD_data = [
-	//["de240", "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/refs/heads/master/maps/korridore.js"],
+	["de245", "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/refs/heads/master/maps/korridore.js"],
 	[]
 ];
 
@@ -84,7 +84,7 @@ win.TWLD_data = [
 	const data = win.TWLD_data || [
 		// [world, link]
 		// ["de197", "https://google.de"]
-		//["de240", "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/refs/heads/master/maps/korridore.js"],
+		["de240", "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/refs/heads/master/maps/korridore.js"],
 		[]
 	];
 

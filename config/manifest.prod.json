@@ -39,7 +39,8 @@
     "main": [
       { "url": "config/assetsBase.js", "id": "assetsBaseMain", "title": "Assets-Basis (Hauptgebäude)", "desc": "Grund-Styles auf der Hauptgebäude-Seite." },
       { "url": "modules/softBuildQueue.js", "id": "softBuildQueue", "title": "Soft-Bauqueue", "desc": "„Soft“-Aufträge direkt in der echten Queue anzeigen." },
-      { "url": "modules/buildHelper.js", "id": "buildHelper", "title": "Bau-Helfer", "desc": "Smarte Hilfen beim Ausbau der Gebäude." }
+      { "url": "modules/buildHelper.js", "id": "buildHelper", "title": "Bau-Helfer", "desc": "Smarte Hilfen beim Ausbau der Gebäude." },
+      { "url": "modules/buildQueue.js", "id": "buildQueue", "title": "Ausbau-Bot", "desc": "Baut automatisch Gebäude aus." }
     ]
   }
 }
