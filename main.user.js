@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SpeckMichs Die Stämme Tool Collection
 // @namespace    https://github.com/deinname/ds-tools
-// @version      3.1.1
+// @version      3.1.2
 // @description  Erweitert die Die Stämme Erfahrung mit einigen Tools und Skripten
 // @author       SpeckMich
 // @connect      raw.githubusercontent.com
@@ -399,14 +399,14 @@ function injectTopbarLink() {
     // DS-Tools settings page: load nothing
     if (isDsToolsSettingsScreen(ctx)) return [];
 
-    async function filterAndExtract(screen, list){
-      const normalized = (list || []).map(normalizeModuleEntry).filter(Boolean);
-      const keep = [];
-      for (const entry of normalized) {
-        if (await isEnabledByPrefsEntry(entry)) keep.push(entry.url);
-      }
-      return keep;
-    }
+async function filterAndExtract(screen, list){
+  const normalized = toArray(list).map(normalizeModuleEntry).filter(Boolean);
+  const keep = [];
+  for (const entry of normalized) {
+    if (await isEnabledByPrefsEntry(entry)) keep.push(entry.url);
+  }
+  return keep;
+}
 
     if (ctx.host.endsWith("ds-ultimate.de") &&
         /^\/tools\/attackPlanner\/\d+\/edit\/[A-Za-z0-9_-]+/.test(ctx.path)) {
