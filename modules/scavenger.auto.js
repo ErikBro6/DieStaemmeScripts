@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DS → Scavenger Auto (safe timing, split-friendly)
-// @version      2.1.0
-// @description  Auto plan/fill via DSScavenger + sequential start clicks with safe delays. Robust reload right after returns hit 00:00:00.
+// @version      2.2.0
+// @description  Auto plan/fill via DSScavenger + sequential start clicks with safe delays. Robust reload right after returns hit 00:00:00. Bot-Schutz safe.
 // @author       SpeckMich
 // @match        https://*.die-staemme.de/game.php?*&screen=place&mode=scavenge*
 // @run-at       document-idle
@@ -10,6 +10,13 @@
 /* global $, jQuery */
 (function () {
   'use strict';
+
+  // ---- Requires DSGuards from main.user.js ----
+  const { gateInterval, gateTimeout, guardAction } = window.DSGuards || {};
+  if (!gateInterval || !gateTimeout || !guardAction) {
+    console.warn('[Scavenger Auto] DSGuards not available, aborting (safety).');
+    return;
+  }
 
   // --------- Settings ----------
   const AUTO_KEY             = 'dsu_scavenger_auto_enabled';
@@ -21,13 +28,17 @@
 
   // --------- State ------------
   let autoEnabled = JSON.parse(localStorage.getItem(AUTO_KEY) || 'true');
-  let autoIv      = null;
   let autoBusy    = false;
   let lastClickTs = 0;
-  let refreshTmo  = null;
+
+  // cancel handle for the “reload when 00:00:00” timer
+  let cancelReloadWait = null;
 
   // --------- Helpers ----------
-  const $docReady = (fn) => (document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', fn) : fn());
+  const $docReady = (fn) => (document.readyState === 'loading'
+    ? document.addEventListener('DOMContentLoaded', fn)
+    : fn());
+
   const now = () => Date.now();
 
   function parseHMS(text) {
@@ -51,33 +62,43 @@
   }
 
   function forceReload(cacheBust = true) {
-    try {
+    guardAction(() => {
       const url = new URL(location.href);
       if (cacheBust) url.searchParams.set('_tmr', Date.now());
       location.replace(url.toString());
-    } catch {
-      location.href = location.href;
-    }
+    });
   }
 
+  // cancelable, Bot-Schutz-gated “reload after last return hits 00:00:00”
   function scheduleNextReload() {
-    if (refreshTmo) { clearTimeout(refreshTmo); refreshTmo = null; }
+    // clear previous wait if any
+    if (typeof cancelReloadWait === 'function') {
+      cancelReloadWait();
+      cancelReloadWait = null;
+    }
+
     const ms = getMinCountdownMs();
     if (ms == null) return;
-    refreshTmo = setTimeout(() => {
-      // recheck to avoid too-early reload if DOM just changed
+
+    cancelReloadWait = gateTimeout(() => {
+      // re-check just before acting (DOM could have shifted)
       const again = getMinCountdownMs();
       if (again != null && again > 2500) {
+        // still some time left → reschedule
         scheduleNextReload();
         return;
       }
-      setTimeout(() => forceReload(true), POST_FINISH_DELAY_MS);
+      // small safety delay, still gated
+      gateTimeout(() => forceReload(true), POST_FINISH_DELAY_MS);
     }, ms);
   }
 
   function debounce(fn, wait) {
-    let t = null;
-    return () => { if (t) clearTimeout(t); t = setTimeout(fn, wait); };
+    let cancel = null;
+    return () => {
+      if (cancel) { cancel(); cancel = null; }
+      cancel = gateTimeout(fn, wait);
+    };
   }
 
   function installScavengeObserver() {
@@ -104,8 +125,10 @@
     });
 
     mo.observe(host, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['class'] });
+
+    // first schedule + a gated periodic fallback
     scheduleNextReload();
-    setInterval(scheduleNextReload, 30_000); // fail-safe
+    gateInterval(scheduleNextReload, 30_000, { jitter: [500, 1500] });
   }
 
   // --------- UI ----------
@@ -128,7 +151,9 @@
       autoEnabled = jQuery(this).is(':checked');
       localStorage.setItem(AUTO_KEY, JSON.stringify(autoEnabled));
     });
-    setInterval(() => {
+
+    // harmless UI clock; keep it gated anyway so everything pauses uniformly
+    gateInterval(() => {
       const sec = lastClickTs ? Math.floor((now() - lastClickTs) / 1000) : '–';
       jQuery('#autoLast').text(sec + 's');
     }, 1000);
@@ -138,7 +163,7 @@
   function runAutoOnce() {
     if (!autoEnabled || autoBusy) return;
     const API = window.DSScavenger;
-    if (!API || typeof API.isReady !== 'function' || !API.isReady()) return; // wait for calc module to boot
+    if (!API || typeof API.isReady !== 'function' || !API.isReady()) return; // wait for calc module
 
     autoBusy = true;
     try {
@@ -149,21 +174,26 @@
 
       lastClickTs = now();
 
-      // After a short wait, click all visible free start buttons from bottom to top with 1s spacing
-      setTimeout(() => {
+      // After a short wait, click all visible free start buttons from bottom to top with spacing
+      gateTimeout(() => {
+        // collect at firing time
         const $starts = jQuery('.scavenge-option .free_send_button:visible');
         let idx = $starts.length - 1;
-        (function clickNext() {
+
+        const clickNext = () => {
           if (idx < 0) { autoBusy = false; return; }
           const $btn = $starts.eq(idx);
-          if ($btn && $btn.length) $btn.trigger('click');
+          guardAction(() => $btn?.trigger('click'));  // last-second bailout if Bot-Schutz toggled
           idx--;
-          setTimeout(clickNext, STEP_DELAY_MS);
-        })();
+          // space the clicks safely
+          gateTimeout(clickNext, STEP_DELAY_MS);
+        };
+
+        clickNext();
       }, STEP_DELAY_MS);
     } catch (e) {
       autoBusy = false;
-      // optional: console.warn(e);
+      // console.warn(e);
     }
   }
 
@@ -172,16 +202,20 @@
     addToggleUI();
     installScavengeObserver();
 
-  const _oldRun = runAutoOnce;
-  runAutoOnce = function () {
-    _oldRun();
-    setTimeout(scheduleNextReload, 1500);
-  };
+    // After each run, nudge the reload scheduler to reflect new timings
+    const _oldRun = runAutoOnce;
+    runAutoOnce = function () {
+      _oldRun();
+      gateTimeout(scheduleNextReload, 1500);
+    };
 
-  if (!autoIv) {
-    autoIv = setInterval(runAutoOnce, AUTO_INTERVAL_MS);
-    setTimeout(runAutoOnce, 800);
-  }
+    // Main loop (Bot-Schutz gated)
+    gateInterval(() => runAutoOnce(), AUTO_INTERVAL_MS, {
+      jitter: [1000, 3000],         // optional spread
+      requireVisible: false
+    });
 
+    // One gentle kick on load, still gated
+    gateTimeout(() => runAutoOnce(), POST_FINISH_DELAY_MS);
   });
 })();

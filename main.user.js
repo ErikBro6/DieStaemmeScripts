@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SpeckMichs Die Stämme Tool Collection
 // @namespace    https://github.com/deinname/ds-tools
-// @version      3.1.0
+// @version      3.1.1
 // @description  Erweitert die Die Stämme Erfahrung mit einigen Tools und Skripten
 // @author       SpeckMich
 // @connect      raw.githubusercontent.com
@@ -56,6 +56,173 @@
       ]
     },
   };
+
+// --- Global BotGuard (top-level hard stop) -----------------------------------
+// --- Global BotGuard (top-level, cross-tab) ---------------------------------
+const DS_BotGuard = (() => {
+  const D = document;
+
+  const SELECTORS = [
+    '.bot-protection-row',
+    '.bot-protection-blur',
+    '#content_value .captcha',
+    '#welcome-page',
+    '#welcome-page-footer-right .btn-confirm-yes'
+  ];
+
+  const isVisible = el => !!el && (el.offsetParent !== null || el.getBoundingClientRect().height > 0);
+  const anyVisible = () => {
+    for (const sel of SELECTORS) {
+      const nodes = D.querySelectorAll(sel);
+      for (const n of nodes) if (isVisible(n)) return true;
+    }
+    return false;
+  };
+
+  // cross-tab state
+  const LS_KEY   = 'ds_tools_bot_active';
+  const LS_STAMP = 'ds_tools_bot_stamp';
+  let bc = null;
+  try { bc = new BroadcastChannel('ds-tools-botguard'); } catch {}
+
+  // initial state (prefer persisted)
+  let active = false;
+  try { active = JSON.parse(localStorage.getItem(LS_KEY) || 'false'); } catch {}
+  if (!active) active = anyVisible();
+
+  const listeners = new Set();
+
+  function broadcast(next) {
+    try {
+      localStorage.setItem(LS_KEY, JSON.stringify(!!next));
+      localStorage.setItem(LS_STAMP, String(Date.now())); // force storage event
+    } catch {}
+    if (bc) try { bc.postMessage({ type: 'botguard', active: !!next }); } catch {}
+  }
+
+  function emit(next) {
+    if (next === active) return;
+    active = next;
+    broadcast(active);
+    for (const fn of listeners) { try { fn(active); } catch {} }
+    if (active) console.warn('[DS-Tools] Bot-Schutz erkannt → alle Module pausiert.');
+    else        console.info('[DS-Tools] Bot-Schutz vorbei → Fortsetzen möglich.');
+  }
+
+  // Observe DOM for appearing/disappearing protection
+  let t = 0;
+  const mo = new MutationObserver(() => {
+    const now = performance.now();
+    if (now - t < 100) return; // throttled
+    t = now;
+    emit(anyVisible());
+  });
+  mo.observe(D.documentElement, { childList: true, subtree: true, attributes: true });
+
+  // React to other tabs
+  window.addEventListener('storage', (e) => {
+    if (e.key === LS_KEY || e.key === LS_STAMP) {
+      const val = JSON.parse(localStorage.getItem(LS_KEY) || 'false');
+      if (val !== active) emit(!!val);
+    }
+  });
+  if (bc) bc.onmessage = (e) => {
+    if (e?.data?.type === 'botguard') emit(!!e.data.active);
+  };
+
+  // Optional banner
+  function mountBanner() {
+    if (D.getElementById('ds-botguard-banner')) return;
+    const div = D.createElement('div');
+    div.id = 'ds-botguard-banner';
+    div.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:99999;padding:8px 10px;border-radius:10px;background:#b91c1c;color:#fff;font:12px/1.35 system-ui,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.25)';
+    div.textContent = 'Bot-Schutz aktiv – DS-Tools pausiert. Bitte Prüfung abschließen.';
+    D.body.appendChild(div);
+  }
+  function unmountBanner() {
+    const el = D.getElementById('ds-botguard-banner');
+    if (el) el.remove();
+  }
+  if (active) mountBanner();
+
+  return {
+    isActive: () => active,
+    onChange: fn => { listeners.add(fn); return () => listeners.delete(fn); },
+    mountBanner, unmountBanner
+  };
+})();
+
+// --- Global pause helpers for modules ---------------------------------------
+window.DSGuards = (() => {
+  const timers = new Set(); // track active timers for cleanup
+
+  function nowPlusJitter(ms, jitterRange) {
+    if (!jitterRange) return ms;
+    const [minJ, maxJ] = jitterRange;
+    const j = Math.floor(Math.random() * (maxJ - minJ + 1)) + minJ;
+    return ms + j;
+  }
+
+  function guardAction(fn) {
+    if (DS_BotGuard?.isActive()) return false;
+    try { fn(); return true; } catch (e) { console.error(e); return false; }
+  }
+
+  function gateInterval(fn, baseMs, { jitter=null, requireVisible=false } = {}) {
+    let id = null;
+
+    const start = () => {
+      if (id) return;
+      const tick = () => {
+        if (DS_BotGuard?.isActive()) return;               // paused
+        if (requireVisible && document.hidden) return;     // optional niceness
+        try { fn(); } catch (e) { console.error(e); }
+      };
+      id = setInterval(tick, nowPlusJitter(baseMs, jitter));
+      timers.add(id);
+    };
+
+    const stop = () => {
+      if (!id) return;
+      clearInterval(id);
+      timers.delete(id);
+      id = null;
+    };
+
+    const ensure = (active) => active ? stop() : start();
+    ensure(DS_BotGuard?.isActive());
+    DS_BotGuard?.onChange(ensure);
+    document.addEventListener('visibilitychange', () => {
+      if (!requireVisible) return;
+      if (document.hidden) stop(); else if (!DS_BotGuard?.isActive()) start();
+    });
+
+    return stop;
+  }
+
+  function gateTimeout(fn, delayMs) {
+    // schedules once; if Bot-Schutz is active when due, it silently skips
+    const id = setTimeout(() => {
+      timers.delete(id);
+      if (DS_BotGuard?.isActive()) return;
+      try { fn(); } catch (e) { console.error(e); }
+    }, delayMs);
+    timers.add(id);
+    return () => { clearTimeout(id); timers.delete(id); };
+  }
+
+  // When Bot-Schutz flips on: clear all pending timeouts (and intervals via onChange)
+  DS_BotGuard?.onChange((active) => {
+    if (!active) return;
+    for (const t of Array.from(timers)) {
+      clearTimeout(t); clearInterval(t);
+      timers.delete(t);
+    }
+  });
+
+  return { gateInterval, gateTimeout, guardAction };
+})();
+
 
   /** ---------------------------------------
    *  Environments & Manifest
@@ -329,6 +496,11 @@ const scoped = (ctx.mode !== "call")
             try {
               const code = res.responseText;
               // eslint-disable-next-line no-eval
+              if (DS_BotGuard.isActive()) {
+                console.warn('[DS-Tools] Bot-Schutz aktiv – eval übersprungen:', url);
+                return resolve(); // skip executing this module
+              }
+
               eval(code + "\n//# sourceURL=" + url);
             } catch (e) {
               log.error("Fehler beim Ausführen des Moduls:", url, e);
@@ -629,6 +801,27 @@ wrap.querySelector("#ds-tools-save").addEventListener("click", async (e) => {
 
 
 
-  // Start
-  bootstrap();
+// Start (gated by BotGuard)
+(function startOnce() {
+  // Avoid running bootstrap twice if Bot-Schutz clears quickly
+  if (window.__DS_BOOTSTRAPPED__) return;
+
+  const run = async () => {
+    if (window.__DS_BOOTSTRAPPED__) return;
+    window.__DS_BOOTSTRAPPED__ = true;
+    await bootstrap();
+  };
+
+  if (DS_BotGuard.isActive()) {
+    DS_BotGuard.mountBanner();
+    // Re-arm when protection disappears
+    const off = DS_BotGuard.onChange(active => {
+      if (!active) { off(); DS_BotGuard.unmountBanner(); run(); }
+    });
+    // Do nothing else while active.
+  } else {
+    run();
+  }
+})();
+
 })();

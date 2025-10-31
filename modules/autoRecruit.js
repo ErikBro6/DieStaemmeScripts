@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         SpeckMichs Auto Recruiter v1
+// @name         SpeckMichs Auto Recruiter v1 (Bot-Schutz safe)
 // @namespace    http://tampermonkey.net/
-// @version      1.1
-// @description  Automatisiert Masseneinheitenrekrutierung mit UI-Kontrolle in Die Stämme (DE)
+// @version      1.2
+// @description  Automatisiert Masseneinheitenrekrutierung mit UI-Kontrolle (gated by DSGuards) in Die Stämme (DE)
 // @author       SpeckMich
 // @match        https://*.die-staemme.de/game.php?village=*&screen=train*
 // @match        https://*.die-staemme.de/game.php?screen=train*
@@ -13,12 +13,24 @@
 (function () {
   'use strict';
 
-  let recruitingEnabled = JSON.parse(localStorage.getItem("recruitingEnabled")) ?? true;
-  let recruitDelaySeconds = parseInt(localStorage.getItem("recruitDelaySeconds")) || 5;
-  let recruitInterval = null;
+  // Require DSGuards from main.user.js for Bot-Schutz safety
+  const { gateInterval, gateTimeout, guardAction } = window.DSGuards || {};
+  if (!gateInterval || !gateTimeout || !guardAction) {
+    console.warn('[AutoRecruit] DSGuards not available → aborting for safety.');
+    return;
+  }
 
+  // ---- State / Settings -----------------------------------------------------
+  let recruitingEnabled = JSON.parse(localStorage.getItem('recruitingEnabled') || 'true');
+  let recruitDelaySeconds = parseInt(localStorage.getItem('recruitDelaySeconds'), 10);
+  if (!Number.isFinite(recruitDelaySeconds) || recruitDelaySeconds < 1) recruitDelaySeconds = 5;
+
+  let cancelRecruitLoop = null;   // canceller returned by gateInterval
+  let cancelOneShotKick = null;   // canceller returned by gateTimeout
+  let cancelReturnTmo = null;     // canceller for the "return" navigation
+
+  // ---- UI -------------------------------------------------------------------
   function styleLikeAutoScavenge(btn, isOn) {
-    // Exact look & feel of the Auto-Scavenge toggle
     btn.style.padding = '8px 12px';
     btn.style.fontWeight = 'bold';
     btn.style.borderRadius = '8px';
@@ -30,7 +42,10 @@
   }
 
   function createControlPanel() {
+    if (document.getElementById('dsu-auto-recruit')) return;
+
     const container = document.createElement('div');
+    container.id = 'dsu-auto-recruit';
     container.style.position = 'fixed';
     container.style.top = '120px';
     container.style.right = '20px';
@@ -41,38 +56,35 @@
     container.style.borderRadius = '8px';
     container.style.boxShadow = '0 0 5px rgba(0,0,0,0.2)';
     container.style.fontSize = '14px';
+    container.style.display = 'flex';
+    container.style.alignItems = 'center';
+    container.style.gap = '8px';
 
     const toggleButton = document.createElement('button');
-    toggleButton.textContent = recruitingEnabled ? "Recruiting: ON" : "Recruiting: OFF";
+    toggleButton.textContent = recruitingEnabled ? 'Recruiting: ON' : 'Recruiting: OFF';
     styleLikeAutoScavenge(toggleButton, recruitingEnabled);
-    toggleButton.style.marginBottom = '10px';
 
     toggleButton.addEventListener('click', () => {
       recruitingEnabled = !recruitingEnabled;
-      localStorage.setItem("recruitingEnabled", JSON.stringify(recruitingEnabled));
-      toggleButton.textContent = recruitingEnabled ? "Recruiting: ON" : "Recruiting: OFF";
+      localStorage.setItem('recruitingEnabled', JSON.stringify(recruitingEnabled));
+      toggleButton.textContent = recruitingEnabled ? 'Recruiting: ON' : 'Recruiting: OFF';
       styleLikeAutoScavenge(toggleButton, recruitingEnabled);
-
-      if (recruitingEnabled) {
-        startRecruiting();
-      } else {
-        stopRecruiting();
-      }
+      if (recruitingEnabled) startRecruiting(); else stopRecruiting();
     });
 
     const delayLabel = document.createElement('label');
     delayLabel.textContent = 'Delay (s): ';
-    delayLabel.style.marginRight = '5px';
 
     const delayInput = document.createElement('input');
     delayInput.type = 'number';
-    delayInput.value = recruitDelaySeconds;
-    delayInput.min = 1;
-    delayInput.style.width = '50px';
+    delayInput.min = '1';
+    delayInput.value = String(recruitDelaySeconds);
+    delayInput.style.width = '56px';
 
     delayInput.addEventListener('change', () => {
-      recruitDelaySeconds = parseInt(delayInput.value) || 5;
-      localStorage.setItem("recruitDelaySeconds", recruitDelaySeconds.toString());
+      const v = parseInt(delayInput.value, 10);
+      recruitDelaySeconds = Number.isFinite(v) && v >= 1 ? v : 5;
+      localStorage.setItem('recruitDelaySeconds', String(recruitDelaySeconds));
       if (recruitingEnabled) {
         stopRecruiting();
         startRecruiting();
@@ -82,71 +94,106 @@
     container.appendChild(toggleButton);
     container.appendChild(delayLabel);
     container.appendChild(delayInput);
-
     document.body.appendChild(container);
   }
 
+  // ---- Core actions (all gated) --------------------------------------------
   async function clickRecruitButtons() {
-    const fillButtons = document.querySelectorAll('input[type="button"][value="Truppen einfügen"]');
-    if (fillButtons.length > 0) {
-      fillButtons.forEach(btn => btn.click());
+    // 1) Fill rows: click all "Truppen einfügen" buttons (staggered & guarded)
+    const fillButtons = Array.from(document.querySelectorAll('input[type="button"][value="Truppen einfügen"]'));
+    if (fillButtons.length) {
+      for (let i = 0; i < fillButtons.length; i++) {
+        const btn = fillButtons[i];
+        guardAction(() => btn?.click());
+        // gentle stagger to avoid burst traffic
+        await new Promise(r => gateTimeout(r, 120));
+      }
+    }
 
-      await new Promise(resolve => setTimeout(resolve, 500)); // kurz warten
+    // 2) Small wait to allow DOM to update (still gated)
+    await new Promise(r => gateTimeout(r, 500));
 
-      const recruitButtons = document.querySelectorAll('input[type="submit"][value="Rekrutieren"]');
-      recruitButtons.forEach(btn => btn.click());
-
-      console.log("✅ Rekrutierung ausgeführt.");
-    } else {
-      console.log("⚠️ Keine Rekrutierungsfelder gefunden.");
+    // 3) Click all "Rekrutieren" submit buttons (staggered & guarded)
+    const recruitButtons = Array.from(document.querySelectorAll('input[type="submit"][value="Rekrutieren"]'));
+    if (recruitButtons.length) {
+      for (let i = 0; i < recruitButtons.length; i++) {
+        const btn = recruitButtons[i];
+        guardAction(() => btn?.click());
+        await new Promise(r => gateTimeout(r, 140));
+      }
+      // Done
+      console.log('[AutoRecruit] ✅ Rekrutierung ausgeführt.');
+    } else if (!fillButtons.length) {
+      console.log('[AutoRecruit] ⚠️ Keine Rekrutierungsfelder gefunden.');
     }
   }
 
   function startRecruiting() {
-    if (!recruitInterval) {
-      clickRecruitButtons(); // einmal direkt ausführen
-      recruitInterval = setInterval(() => {
-        if (recruitingEnabled) {
-          clickRecruitButtons();
-        }
-      }, recruitDelaySeconds * 1000);
-      console.log("🔁 Recruiting gestartet.");
-    }
+    if (cancelRecruitLoop) return;
+
+    // One immediate (but gated) kick so it starts without waiting a full interval
+    cancelOneShotKick = gateTimeout(() => {
+      if (recruitingEnabled) clickRecruitButtons();
+    }, 300);
+
+    // Main loop—completely Bot-Schutz–aware
+    cancelRecruitLoop = gateInterval(() => {
+      if (recruitingEnabled) clickRecruitButtons();
+    }, recruitDelaySeconds * 1000, {
+      jitter: [250, 750],       // small jitter to de-sync across tabs
+      requireVisible: false     // keep running even if tab is background; DSGuards still pauses on Bot-Schutz
+    });
+
+    // Also schedule a safe return (below)
+    scheduleReturnToMass();
+    console.log('[AutoRecruit] 🔁 Recruiting gestartet.');
   }
 
   function stopRecruiting() {
-    clearInterval(recruitInterval);
-    recruitInterval = null;
-    console.log("⛔ Recruiting gestoppt.");
+    if (typeof cancelRecruitLoop === 'function') cancelRecruitLoop();
+    cancelRecruitLoop = null;
+
+    if (typeof cancelOneShotKick === 'function') cancelOneShotKick();
+    cancelOneShotKick = null;
+
+    if (typeof cancelReturnTmo === 'function') cancelReturnTmo();
+    cancelReturnTmo = null;
+
+    console.log('[AutoRecruit] ⛔ Recruiting gestoppt.');
   }
 
-  function tryReturn() {
-    const stored = parseInt(localStorage.getItem("recruitDelaySeconds"), 10);
-    const fallback = (Number.isFinite(stored) ? stored : 5) * 1000;
+  // After acting on a subpage, try to navigate back to the “mass” page (gated)
+  function scheduleReturnToMass() {
+    if (typeof cancelReturnTmo === 'function') cancelReturnTmo();
 
-    const backLink = document.querySelector('a[href*="screen=train"][href*="mode=mass"][href*="page=0"]');
+    const stored = parseInt(localStorage.getItem('recruitDelaySeconds'), 10);
+    const fallbackMs = (Number.isFinite(stored) ? stored : 5) * 1000;
 
-    if (backLink) {
-      setTimeout(() => {
-        // FF-safe hard navigation; avoids click() being ignored
-        location.assign(backLink.href);
-      }, fallback);
-    } else {
-      // Keep looking a bit, but don't spin too hard
-      setTimeout(tryReturn, 200);
-    }
+    cancelReturnTmo = gateTimeout(() => {
+      const backLink =
+        document.querySelector('a[href*="screen=train"][href*="mode=mass"][href*="page=0"]') ||
+        document.querySelector('a[href*="screen=train"][href*="mode=mass"]') ||
+        document.querySelector('a[href*="screen=train"]');
+
+      if (backLink) {
+        guardAction(() => location.assign(backLink.href));
+      } else {
+        // try again briefly; still gated so it auto-pauses on Bot-Schutz
+        scheduleReturnToMass();
+      }
+    }, fallbackMs);
   }
 
+  // ---- Boot -----------------------------------------------------------------
   function boot() {
     createControlPanel();
-    if (recruitingEnabled) {
-      startRecruiting();
-      tryReturn();
-    }
+    if (recruitingEnabled) startRecruiting();
   }
+
   if (document.readyState === 'complete' || document.readyState === 'interactive') {
     boot();
   } else {
     window.addEventListener('DOMContentLoaded', boot, { once: true });
   }
+
 })();

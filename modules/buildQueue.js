@@ -1,12 +1,7 @@
 // modules/buildBot.js
-// DS → Build Bot (integrated TKK-style)
+// DS → Build Bot (integrated TKK-style) — BOT-SCHUTZ SAFE
 // Loads on: screen=main
 // Author: SpeckMich (integration), original concept by TiKayKhan
-// Notes:
-//  - Stores per-world template selection + per-template queues
-//  - Optional quest automation toggle
-//  - Safe anti-bot check: halts if InnoGames bot popup is present
-//  - UI fits DS-Tools aesthetic (inline table + buttons)
 
 /* global game_data, $, jQuery, UI, TWMap, GM, unsafeWindow */
 (function () {
@@ -15,8 +10,14 @@
   // --- Guards ----------------------------------------------------------------
   if (!/screen=main/.test(location.href)) return;
 
-  // --- Small helpers ---------------------------------------------------------
+  // Require DSGuards from main.user.js for Bot-Schutz safety
+  const { gateInterval, gateTimeout, guardAction } = window.DSGuards || {};
+  if (!gateInterval || !gateTimeout || !guardAction) {
+    console.warn('[BuildBot] DSGuards not available → aborting for safety.');
+    return;
+  }
 
+  // --- Small helpers ---------------------------------------------------------
   const GMwrap = {
     async get(key, def) {
       try { return (await GM.getValue(key)) ?? def; } catch { return JSON.parse(localStorage.getItem(key) ?? 'null') ?? def; }
@@ -27,40 +28,20 @@
     async del(key) { try { await GM.deleteValue(key); } catch { localStorage.removeItem(key); } }
   };
 
-const W = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
-const $doc = W.jQuery || W.$;
+  const W = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
+  const $doc = W.jQuery || W.$;
 
-const ready = (selector, callback) => {
-  let el = null;
-  try {
-    // If the selector has jQuery-only bits (e.g., :first), use jQuery.
-    if (selector.includes(':')) {
+  const ready = (selector, callback) => {
+    let el = null;
+    try {
+      if (selector.includes(':')) el = $doc ? $doc(selector)[0] : null;
+      else el = document.querySelector(selector);
+    } catch {
       el = $doc ? $doc(selector)[0] : null;
-    } else {
-      el = document.querySelector(selector);
     }
-  } catch {
-    el = $doc ? $doc(selector)[0] : null;
-  }
-  if (el) callback(el);
-  else setTimeout(() => ready(selector, callback), 100);
-};
-
-  // Anti-bot popup present? If yes, display timestamp and pause logic.
-  function botOK(abcMode = false) {
-    const $bot = $doc('div#bot_check, div#popup_box_bot_protection');
-    if ($bot.length) {
-      const html = `<h2 style="text-align:center;color:red;">${new Date().toString()}</h2>`;
-      if ($doc('div#bot_check').length) $doc('div#bot_check').append(html);
-      else $doc('div.popup_box_content').append(html);
-      if (abcMode) {
-        $doc('div#bot_check, div#popup_box_bot_protection').find('iframe').css({ padding: '4px 3px 2px 4px', backgroundColor: '#abc' });
-        document.title = 'DSU ABC';
-      }
-      return false;
-    }
-    return true;
-  }
+    if (el) callback(el);
+    else setTimeout(() => ready(selector, callback), 100);
+  };
 
   // --- Keys / names ----------------------------------------------------------
   const WORLD = game_data.world;
@@ -68,9 +49,8 @@ const ready = (selector, callback) => {
   const VILLAGE_ID = game_data.village?.id;
   const K = (s) => `dsu.buildbot.${s}.${WORLD}`;
 
-  // per-village: which template index is selected
   const KEY_SELECTED = (vid) => `${K('selected')}.${vid}`;
-  const KEY_QUEUE_T = (tIdx) => `${K('queueTemplate')}.${tIdx}`; // stores array of codes "-" or numeric strings
+  const KEY_QUEUE_T = (tIdx) => `${K('queueTemplate')}.${tIdx}`;
   const KEY_STATE = `${K('foldState')}.${PLAYER_ID}`; // 'plus' | 'minus'
   const KEY_QUESTS = `${K('doQuests')}.${PLAYER_ID}`;
 
@@ -96,44 +76,36 @@ const ready = (selector, callback) => {
     { name: 'watchtower', image: '3', title: 'Wachturm', levels: 20 }
   ];
 
-  // --- Fallback templates ----------------------------------------------------
-  // NOTE: These are taken from the TKK script. You can overwrite via Import/Save.
-  // To keep this file readable, we keep them as a single object.
+  // --- Fallback templates (kept as in your original) -------------------------
   const FALLBACKS = (function () {
     const f = {};
-    // (You can prune these if you like. Kept for parity with original.)
     f.default = ["5","4","6","1","0","3","2","1","0","2","1","0","2","5","5","4","4","12","2","2","1","0","2","1","3","3","3","4","0","2","4","1","0","1","4","0","12","12","12","12","5","1","5","0","3","1","5","0","4","3","2","1","3","0","5","4","4","0","3","1","0","1","5","2","5","0","4","1","3","5","2","1","0","4","2","4","4","5","0","1","2","4","5","5","1","0","2","4","3","3","3","3","3","5","5","2","1","0","5","2","5","5","4","3","2","5","1","0","4","5","1","0","4","5","4","2","1","0","3","4","1","0","2","3","4","5","1","0","2","3","4","1","0","5","2","3","5","4","1","0","5","2","4","4","2","3","2","3","2","3","8","8","8","8","8","8","9","9","9","9","9","8","8","10","10","10","10","8","8","11","11","11","8","8","8","8","8","8","8","8","8","8","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-"];
     f[1] = ["5","0","1","2","3","4","5","0","1","2","3","4","5","0","1","2","3","4","5","0","1","2","3","4","5","0","1","2","3","4","9","12","12","13","5","0","1","2","4","13","12","5","0","1","2","13","4","12","5","0","1","2","4","13","12","5","0","1","2","4","5","0","1","2","4","0","1","0","1","5","4","12","0","1","2","0","1","5","4","12","2","0","1","9","9","9","9","8","8","8","8","8","10","10","10","0","1","2","5","4","12","0","1","2","0","1","2","5","4","12","0","1","2","5","4","12","1","0","2","5","4","0","1","2","5","4","0","1","2","5","4","0","1","2","5","4","0","1","2","5","4","0","1","2","0","1","2","4","0","1","2","-","-","-","-","-","-","-","-","-"];
     f[2] = ["5","0","1","2","3","4","5","0","1","2","3","4","5","0","1","2","3","4","5","0","1","2","3","4","5","0","1","2","3","4","9","12","12","13","5","0","1","2","4","13","12","5","0","1","2","13","4","12","5","0","1","2","4","13","12","5","0","1","2","4","5","0","1","2","4","0","1","0","1","5","13","4","12","0","1","2","0","1","5","4","12","2","0","1","9","9","9","9","13","8","8","8","8","8","10","10","10","0","1","2","5","4","12","0","1","2","0","1","2","5","4","12","0","1","2","5","4","12","1","0","2","5","4","0","1","2","5","4","0","1","2","5","4","0","1","2","5","4","0","1","2","5","4","0","1","2","0","1","2","4","0","1","2","-","-","-","-","-","-","-"];
-    // (Keeping 3..18 as in the original for parity)
-    f[3] = f.default.slice();
-    f[4] = f.default.slice();
-    f[5] = f.default.slice();
-    f[6] = f.default.slice();
-    f[7] = f.default.slice();
-    f[8] = f.default.slice();
+    f[3] = f.default.slice(); f[4] = f.default.slice(); f[5] = f.default.slice();
+    f[6] = f.default.slice(); f[7] = f.default.slice(); f[8] = f.default.slice();
     f[9] = f.default.slice();
     f[10] = ["13","13","13","13","13","13","13","13","13","13","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-"];
     f[11] = f[10].concat();
     f[12] = f[10].concat('13');
     f[13] = ["5","5","5","5","5","9","9","9","9","8","8","8","8","8","9","5","5","5","5","5","9","10","10","10","9","9","9","9","10","10","8","8","8","9","10","8","8","9","10","11","11","11","11","11","9","9","10","9","10","10","9","10","9","10","9","10","11","11","11","9","9","10","10","9","9","9","10","10","9","9","10","10","10","11","11","11","11","11","11","11","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-"];
     f[14] = ["5","5","5","5","5","5","5","5","5","5","5","5","5","5","5","5","5","5","5","5","9","9","9","9","9","8","8","8","8","8","8","8","12","12","12","12","12","12","12","12","12","12","8","8","8","8","8","8","8","8","8","8","8","8","8","15","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-","-"];
-    // 15-18 mirror default to keep code short; you can replace via UI buttons or import.
-    f[15] = f.default.slice();
-    f[16] = f.default.slice();
-    f[17] = f.default.slice();
-    f[18] = f.default.slice();
+    f[15] = f.default.slice(); f[16] = f.default.slice(); f[17] = f.default.slice(); f[18] = f.default.slice();
     return f;
   })();
 
   // --- State -----------------------------------------------------------------
-  let TEMPLATES_COUNT = 5; // visible selectable templates (can be increased)
+  let TEMPLATES_COUNT = 5; // visible selectable templates
   let selectedT = 1;
   let stateFold = 'minus';
   let doQuests = false;
   let disableStart = false;
   const COLS = 20;
   const RERUN_SEC = 5;
+
+  // Cancellers for gated loops/timeouts
+  let cancelRunLoop = null;
+  let cancelRepaintLoop = null;
 
   // --- UI builders -----------------------------------------------------------
   const iconHtml = (code) => `<i class="icon building-${CODES[code].name}" style="height:16px;vertical-align:-3px;"></i><b>00</b>`;
@@ -167,10 +139,7 @@ const ready = (selector, callback) => {
     const q = await GMwrap.get(KEY_QUEUE_T(selectedT), null);
     return q || FALLBACKS.default.slice();
   }
-
-  async function setQueue(arr) {
-    await GMwrap.set(KEY_QUEUE_T(selectedT), arr);
-  }
+  async function setQueue(arr) { await GMwrap.set(KEY_QUEUE_T(selectedT), arr); }
 
   function toolbarRow() {
     const btnT = (id, label, width = '10%') => `<input type="button" id="${id}" value="${label}" class="btn" style="width:${width};${stateFold === 'plus' ? ' display:none;' : ''}"/>`;
@@ -240,16 +209,13 @@ const ready = (selector, callback) => {
     html += `</td></tr></table></div>`;
 
     const container = document.getElementById('content_value') || document.querySelector('td#content_value') || document.body;
-const firstTable = container.querySelector('table');
-if (firstTable) {
-  firstTable.insertAdjacentHTML('afterend', html);
-} else {
-  container.insertAdjacentHTML('beforeend', html);
-}
-levelPaint(true);
+    const firstTable = container.querySelector('table');
+    if (firstTable) firstTable.insertAdjacentHTML('afterend', html);
+    else container.insertAdjacentHTML('beforeend', html);
 
+    levelPaint(true);
 
-    // Prepare export link content
+    // Prepare export link
     const dataHref = 'data:application/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(queue));
     $doc('#tkk-export').attr('download', 'queue.json').attr('href', dataHref);
   }
@@ -361,9 +327,10 @@ levelPaint(true);
       draw();
     });
 
-    // Start
+    // Start (gated loop)
     $b.on('click', '#tkk-start', async function () {
-      this.disabled = true; disableStart = true; run();
+      this.disabled = true; disableStart = true;
+      startRunLoop(); // start the gated run loop
     });
 
     // Quick buttons mapping
@@ -378,8 +345,10 @@ levelPaint(true);
     $b.on('click', '#AHpush', () => setFB(FALLBACKS[14]));
   }
 
-  // --- Core bot --------------------------------------------------------------
-  function click($el) { $el.mousedown().click().mouseup(); }
+  // --- Core bot (BOT-SCHUTZ SAFE) -------------------------------------------
+  function click($el) {
+    guardAction(() => { try { $el.mousedown().click().mouseup(); } catch {} });
+  }
 
   function handleFreeComplete() {
     const $free = $doc('a.btn-instant-free:visible');
@@ -389,7 +358,8 @@ levelPaint(true);
   function denyBrowserNotif() {
     if ($doc('input#browser_notification_enable').length) {
       $doc('input#browser_notification_enable').prop('checked', false);
-      click($doc('a#browser_notification_enabled_button'));
+      const $btn = $doc('a#browser_notification_enabled_button');
+      if ($btn.length) click($btn);
     }
   }
 
@@ -405,7 +375,10 @@ levelPaint(true);
       const lvl = (levels[code] || 1);
       const sel = `a#main_buildlink_${CODES[code].name}_${lvl}`;
       const $b = $doc(sel);
-      if ($b.length) { if ($b.filter(':visible').length) click($b); return true; }
+      if ($b.length) {
+        if ($b.filter(':visible').length) click($b);
+        return true;
+      }
 
       // unmet reqs and building not present — wait until requirements are met
       const unmet = document.querySelector(`#buildings_unmet a[href$='${CODES[code].name}']`);
@@ -417,48 +390,58 @@ levelPaint(true);
   }
 
   async function run() {
-    if (!botOK(true)) return; // pause when bot check up
+    // Every action below will be skipped automatically while Bot-Schutz is active,
+    // because clicks and the scheduling loop are gated.
     handleFreeComplete();
     denyBrowserNotif();
 
     if (doQuests && $doc('div#questlog > div.quest').length) {
-      // Keep this minimal – original TKK has a very long quest flow.
-      // We just auto-close reward popup if open.
       const $popup = $doc('div#popup_box_quest');
       if ($popup.length) {
         const $btn = $popup.find('a.btn-confirm-yes');
         click($btn.length ? $btn : $popup.find('a.popup_box_close'));
-        setTimeout(run, 1000);
+        // reschedule a short follow-up (gated)
+        gateTimeout(() => run(), 1000);
         return;
       }
     }
 
     const q = await getQueue();
     tryBuildFromQueue(q);
-    setTimeout(run, RERUN_SEC * 1000);
+    // next tick happens from the gated loop; no raw setTimeout here
   }
 
-(async function init() {
-  selectedT = parseInt(await GMwrap.get(KEY_SELECTED(VILLAGE_ID), 1));
-  if (selectedT > TEMPLATES_COUNT) selectedT = 1;
-  stateFold = await GMwrap.get(KEY_STATE, 'minus');
-  doQuests  = await GMwrap.get(KEY_QUESTS, false);
+  function startRunLoop() {
+    // cancel existing loop if any
+    if (typeof cancelRunLoop === 'function') cancelRunLoop();
+    // immediate gated kick
+    gateTimeout(() => run(), 300);
+    // main gated loop (auto-pauses during Bot-Schutz in ALL tabs)
+    cancelRunLoop = gateInterval(() => run(), RERUN_SEC * 1000, {
+      jitter: [250, 750],
+      requireVisible: false
+    });
+  }
 
-  // Render once the main content exists
-  ready('#content_value', async () => {
-    await draw();
-    wireHandlers();
+  // --- Boot ------------------------------------------------------------------
+  (async function init() {
+    selectedT = parseInt(await GMwrap.get(KEY_SELECTED(VILLAGE_ID), 1));
+    if (selectedT > TEMPLATES_COUNT) selectedT = 1;
+    stateFold = await GMwrap.get(KEY_STATE, 'minus');
+    doQuests  = await GMwrap.get(KEY_QUESTS, false);
 
-    // Periodic repaint / presence check
-    const iv = setInterval(() => {
-      if (!botOK(false)) { clearInterval(iv); return; }
-      if (document.getElementById('tkk-queue')) {
-        levelPaint(false);
-      } else {
-        draw();
-      }
-    }, 1000);
-  });
-})();
+    // Render once the main content exists
+    ready('#content_value', async () => {
+      await draw();
+      wireHandlers();
+
+      // Gated periodic repaint / presence check
+      if (typeof cancelRepaintLoop === 'function') cancelRepaintLoop();
+      cancelRepaintLoop = gateInterval(() => {
+        if (document.getElementById('tkk-queue')) levelPaint(false);
+        else draw();
+      }, 1000, { requireVisible: false });
+    });
+  })();
 
 })();
