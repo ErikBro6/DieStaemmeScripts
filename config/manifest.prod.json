@@ -28,7 +28,8 @@
     "overview_villages": { "url": "modules/overviewCombined.js", "id": "overviewCombined", "title": "Übersicht: Kombiniert+", "desc": "Mehr Spalten, Filter & Komfortfunktionen." },
     "market": {
       "resource_balancer": { "url": "modules/resBalancer.js", "id": "resBalancer", "title": "Ressourcen-Balancer", "desc": "Gleicht Lagerstände zwischen Dörfern aus." },
-      "default": { "url": "menu/resBalancerMenuPoint.js", "id": "resBalancerMenu", "title": "Market-Menüpunkt", "desc": "Menüeintrag/Integration für den Balancer." }
+      "default": { "url": "menu/resBalancerMenuPoint.js", "id": "resBalancerMenu", "title": "Market-Menüpunkt", "desc": "Menüeintrag/Integration für den Balancer." },
+      "url": { "url": "modules/addUpRessources.js", "id": "addUpRessources", "title": "Rohstoffe aufaddieren", "desc": "Rohstoffe vor dem anfordern aufaddieren." }
     },
     "attackPlannerEdit": [
       { "url": "modules/dsUltimateTimingSaver.js", "id": "timingSaver", "title": "Timing Saver", "desc": "Speichert/übernimmt Angriffs-Timings." },
