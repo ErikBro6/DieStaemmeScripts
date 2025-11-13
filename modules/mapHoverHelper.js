@@ -158,12 +158,12 @@
       if (!(id in lvl)) return; // only render present buildings
       const bg = (idx % 2 === 0) ? '#F8F4E8' : '#DED3B9';
       cellsIcons.push(
-        `<td style="padding:2px;background-color:${bg}">
+        `<td colspan="2" style="padding:2px;background-color:${bg}">
            <img src="${BUILD_ICON(id)}" class="" data-title="">
          </td>`
       );
       cellsLvls.push(
-        `<td style="padding:2px;background-color:${bg}" class="center">${lvl[id] || ''}</td>`
+        `<td colspan="2" style="padding:2px;background-color:${bg}" class="center">${lvl[id] || ''}</td>`
       );
     });
 
@@ -178,58 +178,81 @@
     `;
   }
 
-  // --- Extract our final snippet: resources table + grid buildings ---
-  function extractSpySnippet(htmlString) {
-    if (!htmlString) return '';
-    const doc = new DOMParser().parseFromString(htmlString, 'text/html');
-    doc.querySelectorAll('script').forEach(s => s.remove());
+function extractSpySnippet(htmlString) {
+  if (!htmlString) return '';
+  const doc = new DOMParser().parseFromString(htmlString, 'text/html');
+  doc.querySelectorAll('script').forEach(s => s.remove());
 
-    const res = doc.getElementById('attack_spy_resources');
-    const resHTML = res ? res.cloneNode(true).outerHTML : '';
+  const res = doc.getElementById('attack_spy_resources');
+  const resHTML = res ? res.cloneNode(true).outerHTML : '';
 
-    // Prefer hidden JSON for buildings:
-    const hidden = doc.querySelector('#attack_spy_building_data');
-    const gridHTML = hidden ? buildBuildingsGridFromJSON(hidden.getAttribute('value')||'') : '';
+  const hidden = doc.querySelector('#attack_spy_building_data');
+  const gridHTML = hidden
+    ? buildBuildingsGridFromJSON(hidden.getAttribute('value') || '')
+    : '';
 
-    if (!resHTML && !gridHTML) return '';
+  // NUR rohe Tabellen ausgeben, kein zusätzlicher Wrapper
+  return resHTML + gridHTML;
+}
 
-    const style = `
-      <style>
-        .ds-lastrep-spy:after { content:""; display:block; clear:both; }
-        .ds-lastrep-spy table { box-sizing:border-box; }
-      </style>
-    `;
-    return style + `<div class="ds-lastrep-spy">${resHTML}${gridHTML}</div>`;
+function ensureRowColspan2(table, coordStr, innerHTML) {
+  let row = table.querySelector('#info_last_report_row');
+  if (!row) {
+    row = table.insertRow(-1);
+    row.id = 'info_last_report_row';
+    const td = row.insertCell(0);
+    td.colSpan = 2;
+    td.innerHTML = innerHTML;
+  } else {
+    // Auf 1 Zelle normalisieren
+    while (row.cells.length > 1) row.deleteCell(1);
+    const td = row.cells[0] || row.insertCell(0);
+    td.colSpan = 2;
+    td.innerHTML = innerHTML;
   }
+  row.dataset.coord = coordStr;
+  return row;
+}
 
-  // --- Row management in popup ---
-  function ensureRow(table, coordStr, innerHTML){
-    let row = table.querySelector('#info_last_report_row');
-    if (!row) {
-      row = table.insertRow(-1);
-      row.id = 'info_last_report_row';
-      const tdR = row.insertCell(0);
-      tdR.innerHTML = innerHTML;
-    } else {
-      row.cells[0].innerHTML = innerHTML;
-    }
-    row.dataset.coord = coordStr;
-    return row;
-  }
+function renderLoading(table, coordStr) {
+  ensureRowColspan2(
+    table,
+    coordStr,
+    `<table style="border:1px solid #DED3B9" width="100%" cellpadding="0" cellspacing="0">
+       <tbody>
+         <tr class="center">
+           <td style="padding:4px;background-color:#F8F4E8" class="small grey">
+             Lade …
+           </td>
+         </tr>
+       </tbody>
+     </table>`
+  );
+}
 
-  function renderLoading(table, coordStr){
-    ensureRow(table, coordStr, `<span class="small grey">Lade …</span>`);
-  }
-  function renderNone(table, coordStr){
-    ensureRow(table, coordStr, `<span class="small grey">Keine Spähdaten gefunden</span>`);
-  }
+function renderNone(table, coordStr) {
+  ensureRowColspan2(
+    table,
+    coordStr,
+    `<table style="border:1px solid #DED3B9" width="100%" cellpadding="0" cellspacing="0">
+       <tbody>
+         <tr class="center">
+           <td style="padding:4px;background-color:#F8F4E8" class="small grey">
+             Keine Spähdaten gefunden
+           </td>
+         </tr>
+       </tbody>
+     </table>`
+  );
+}
+  
   function renderSpy(table, coordStr, snippetHTML){
     const html = `
       <div class="ds-lastrep-wrap">
         <div class="ds-lastrep-content">${snippetHTML}</div>
       </div>
     `;
-    const row = ensureRow(table, coordStr, html);
+    ensureRowColspan2(table, coordStr, snippetHTML);
 
     // Scale to fit popup width (baseline ≈ 518px)
     try {
