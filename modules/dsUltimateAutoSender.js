@@ -1,5 +1,82 @@
+// modules/dsUltimateAutoSender.js
 (function () {
   'use strict';
+
+  // --- ON/OFF-Toggle --------------------------------------------------------
+  const STORAGE_KEY = 'dsu_auto_sender_enabled';
+  const TOGGLE_ID   = 'dsu-auto-sender-toggle';
+
+  let autoEnabled = true;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw === 'false') autoEnabled = false;
+  } catch (e) { /* ignore */ }
+
+  function styleToggle(btn, isOn) {
+    btn.style.position     = 'fixed';
+    btn.style.bottom       = '20px';
+    btn.style.right        = '20px';
+    btn.style.zIndex       = '9999';
+    btn.style.padding      = '6px 10px';
+    btn.style.borderRadius = '6px';
+    btn.style.border       = '0';
+    btn.style.fontSize     = '12px';
+    btn.style.fontWeight   = 'bold';
+    btn.style.cursor       = 'pointer';
+    btn.style.color        = '#fff';
+    btn.style.boxShadow    = '0 2px 8px rgba(0,0,0,.3)';
+    btn.style.background   = isOn ? '#4CAF50' : '#f44336';
+  }
+
+  function updateToggleButton() {
+    const btn = document.getElementById(TOGGLE_ID);
+    if (!btn) return;
+    btn.textContent = autoEnabled ? 'Auto-Sender: ON' : 'Auto-Sender: OFF';
+    btn.style.background = autoEnabled ? '#4CAF50' : '#f44336';
+  }
+
+  function setAutoEnabled(on) {
+    autoEnabled = !!on;
+    try {
+      localStorage.setItem(STORAGE_KEY, autoEnabled ? 'true' : 'false');
+    } catch (e) { /* ignore */ }
+    updateToggleButton();
+  }
+
+  function createToggleButton() {
+    if (document.getElementById(TOGGLE_ID)) return;
+    const btn = document.createElement('button');
+    btn.id = TOGGLE_ID;
+    btn.type = 'button';
+    btn.textContent = autoEnabled ? 'Auto-Sender: ON' : 'Auto-Sender: OFF';
+    styleToggle(btn, autoEnabled);
+    btn.addEventListener('click', () => {
+      setAutoEnabled(!autoEnabled);
+    });
+    document.body.appendChild(btn);
+  }
+
+  function bootToggle() {
+    if (document.body) {
+      createToggleButton();
+    } else {
+      // Fallback, falls sehr früh geladen
+      const iv = setInterval(() => {
+        if (document.body) {
+          clearInterval(iv);
+          createToggleButton();
+        }
+      }, 100);
+    }
+  }
+
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    bootToggle();
+  } else {
+    window.addEventListener('DOMContentLoaded', bootToggle, { once: true });
+  }
+
+  // --- Bestehende Auto-Sender-Logik ----------------------------------------
 
   const TRIGGER_SEC = 10;     // Kante: >10 -> ==10
   const SCAN_MS = 200;
@@ -57,6 +134,8 @@
   }
 
   async function triggerSend(tr, rowId) {
+    if (!autoEnabled) return; // hart stoppen, wenn OFF
+
     const a = findSendAnchor(tr);
     if (!a) {
       console.warn('Kein Send-Link gefunden für Row:', rowId);
@@ -79,6 +158,8 @@
   }
 
   function checkRow(tr) {
+    if (!autoEnabled) return; // wenn OFF, nichts beobachten
+
     const rowId = tr.getAttribute('id');
     if (!rowId || fired.has(rowId)) return;
 
@@ -107,10 +188,14 @@
 
   // Poll
   setInterval(() => {
+    if (!autoEnabled) return;
     getRows().forEach(checkRow);
   }, SCAN_MS);
 
   // DOM-Änderungen (keine Vorinitialisierung)
-  const mo = new MutationObserver(() => { /* Poll findet neue Rows */ });
+  const mo = new MutationObserver(() => {
+    if (!autoEnabled) return;
+    // Poll findet neue Rows
+  });
   mo.observe(document.documentElement, { childList: true, subtree: true });
 })();
