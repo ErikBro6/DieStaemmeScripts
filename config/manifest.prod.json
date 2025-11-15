@@ -23,7 +23,8 @@
       { "url": "modules/lineMap.js", "id": "lineMap", "title": "Linien auf Karte", "desc": "Zeichnet Verbindungen/Markierungen." },
       { "url": "modules/tooltip.js", "id": "tooltip", "title": "Tooltips+", "desc": "Erweiterte Tooltip-Infos auf der Karte." },
       { "url": "modules/pickVillages.js", "id": "pickVillages", "title": "Dörfer wählen", "desc": "Schnellauswahl von Zieldörfern direkt auf der Karte." },
-      { "url": "modules/mapHoverHelper.js", "id": "mapHoverHelper", "title": "Map Hover Helper", "desc": "Auf der Karte wird das Hover Element erweitert." }
+      { "url": "modules/mapHoverHelper.js", "id": "mapHoverHelper", "title": "Map Hover Helper", "desc": "Auf der Karte wird das Hover Element erweitert." },
+      { "url": "modules/mapDistanceCalculator.js", "id": "mapDistanceCalculator", "title": "Laufzeiten auf Karte berechnen", "desc": "Modul zur Berechnung der Laufzeit auf der Karte" }
     ],
     "overview_villages": { "url": "modules/overviewCombined.js", "id": "overviewCombined", "title": "Übersicht: Kombiniert+", "desc": "Mehr Spalten, Filter & Komfortfunktionen." },
     "market": {
