@@ -11,6 +11,11 @@
 (function () {
   'use strict';
 
+    const url = new URL(location.href);
+  const params = url.searchParams;
+  if (params.get('screen') !== 'place' || params.get('mode') !== 'scavenge') {
+    return; // falsche Unterseite -> Script beendet sich sofort
+  }
   // Public namespace for other modules (e.g., auto)
   const API = (window.DSScavenger ||= {});
 

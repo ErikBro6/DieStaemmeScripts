@@ -10,7 +10,9 @@
       { "url": "modules/autoSender.js", "id": "autoSender", "title": "Auto-Sender", "desc": "Automatisierte Sende-Flows." },
       { "url": "modules/massSupporter.js", "id": "massSupporter", "title": "Massen-Unterstützer", "desc": "Viele Dörfer schnell unterstützen."},
       { "url": "modules/scavenger.calc.js", "id": "calcScavenge", "title": "Raubzug-Rechner", "desc": "Berechner für Raubzug-Optimierung." },
-      { "url": "modules/scavenger.auto.js", "id": "autoScavenge", "title": "Raubzug-Automatisierung", "desc": "Automatisches Scavenging / Raubzüge." }
+      { "url": "modules/scavenger.auto.js", "id": "autoScavenge", "title": "Raubzug-Automatisierung", "desc": "Automatisches Scavenging / Raubzüge." },
+      { "url": "modules/massScavenger.calc.js", "id": "calcMassScavenge", "title": "Massen-Raubzug-Rechner", "desc": "Berechner für Raubzug-Optimierung." },
+      { "url": "modules/massScavenger.auto.js", "id": "autoMassScavenge", "title": "Massen-Raubzug-Automatisierung", "desc": "Automatisches Scavenging / Raubzüge."}
     ],
     "train": [
       { "url": "modules/autoRecruit.js", "id": "autoRecruit", "title": "Rekrutierungs-Automatisierung", "desc": "Automatisches Rekrutieren von Einheiten über Massen-Rekrutierung." }
