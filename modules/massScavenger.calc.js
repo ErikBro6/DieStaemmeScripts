@@ -320,43 +320,75 @@
     return cells;
   }
 
-  // divisor = Anzahl verfügbarer Slots in diesem Dorf (mind. 1)
-  function fillTemplateForVillage(village, enabledUnits, divisor) {
-    const inputs = jQuery('#scavenge_mass_screen .candidate-squad-widget input.unitsInput[name]');
-    if (!inputs.length) return false;
 
-    const perUnit = {};
-    const div = divisor > 0 ? divisor : 1;
 
+  // virtueller Rest-Pool pro Dorf, damit die Truppen fair auf alle freien Slots verteilt werden
+const villagePools = new Map(); // key: village_id (string) -> { unit: remainingCount }
+
+function getVillagePool(village, enabledUnits) {
+  const key = String(village.village_id);
+  let pool = villagePools.get(key);
+
+  if (!pool) {
+    pool = {};
     enabledUnits.forEach(unit => {
       const home = (village.unit_counts_home && village.unit_counts_home[unit]) || 0;
-      perUnit[unit] = Math.floor(home / div);
+      pool[unit] = home;
     });
-
-    console.log('[DSMassScavenger] perUnit (home / freieSlots)', {
-      village_id: village.village_id,
-      divisor: div,
-      perUnit
-    });
-
-    let total = 0;
-
-    inputs.each(function () {
-      const $inp = jQuery(this);
-      const unit = $inp.attr('name');
-      if (!unit) return;
-      const val = perUnit[unit] || 0;
-      total += val;
-      if (val > 0) {
-        $inp.val(String(val));
-      } else {
-        $inp.val('');
-      }
-      $inp.trigger('input').trigger('keyup').trigger('change');
-    });
-
-    return total > 0;
+    villagePools.set(key, pool);
   }
+
+  return pool;
+}
+
+function fillTemplateForVillage(village, enabledUnits, freeSlotsForVillage) {
+  const inputs = jQuery('#scavenge_mass_screen .candidate-squad-widget input.unitsInput[name]');
+  if (!inputs.length) return false;
+
+  const pool = getVillagePool(village, enabledUnits);
+  const div = freeSlotsForVillage > 0 ? freeSlotsForVillage : 1;
+
+  const perUnit = {};
+  enabledUnits.forEach(unit => {
+    const remaining = pool[unit] || 0;
+    // fairer Split: verteile den verbleibenden Pool auf die noch freien Slots
+    const amount = Math.floor(remaining / div);
+    perUnit[unit] = amount;
+  });
+
+  console.log('[DSMassScavenger] perUnit (pool / freieSlots) für Dorf', village.village_id, {
+    freeSlotsForVillage,
+    pool: { ...pool },
+    perUnit
+  });
+
+  let total = 0;
+
+  inputs.each(function () {
+    const $inp = jQuery(this);
+    const unit = $inp.attr('name');
+    if (!unit) return;
+    const val = perUnit[unit] || 0;
+    total += val;
+    if (val > 0) {
+      $inp.val(String(val));
+    } else {
+      $inp.val('');
+    }
+    $inp.trigger('input').trigger('keyup').trigger('change');
+  });
+
+  // jetzt den Pool tatsächlich reduzieren, damit nächste Slots weniger bekommen
+  enabledUnits.forEach(unit => {
+    const used = perUnit[unit] || 0;
+    if (used > 0) {
+      pool[unit] = Math.max(0, (pool[unit] || 0) - used);
+    }
+  });
+
+  return total > 0;
+}
+
 
   function clearAllSelections() {
     const $tbl = jQuery('#scavenge_mass_screen .mass-scavenge-table');
@@ -409,22 +441,23 @@
       return -1;
     }
 
-    // Anzahl freier Slots in DIESEM Dorf als Divisor
-    const freeForVillage = inactiveCells.filter(
-      c => c.villageId === target.villageId
-    ).length || 1;
+// Anzahl freier Slots in DIESEM Dorf als Divisor
+const freeForVillage = inactiveCells.filter(
+  c => c.villageId === target.villageId
+).length || 1;
 
-    console.log(
-      '[DSMassScavenger] Nutze Dorf',
-      village.village_id,
-      `"${village.village_name}"`,
-      'für Slot',
-      target.optionId,
-      '– freie Slots in diesem Dorf:',
-      freeForVillage
-    );
+console.log(
+  '[DSMassScavenger] Nutze Dorf',
+  village.village_id,
+  `"${village.village_name}"`,
+  'für Slot',
+  target.optionId,
+  '– freie Slots in diesem Dorf:',
+  freeForVillage
+);
 
-    const hasUnits = fillTemplateForVillage(village, enabledUnits, freeForVillage);
+const hasUnits = fillTemplateForVillage(village, enabledUnits, freeForVillage);
+
     if (!hasUnits) {
       console.log('[DSMassScavenger] keine sendbaren Units → Abbruch');
       return -1;
@@ -452,6 +485,8 @@
   let MASS_ITER = 0;
   const MASS_ITER_LIMIT = 50;
   const MASS_DELAY_MS = 900;
+  const MASS_STEP_DELAY_MS = 1500; // 1.5s Pause zwischen zwei Mass-Sends
+
 
   function runMassSequence() {
     if (!MASS_RUN_ACTIVE) {
@@ -492,7 +527,9 @@
 
     console.groupEnd();
 
-    setTimeout(runMassSequence, MASS_DELAY_MS);
+    // kleine Pause, damit DS Slot/DOM aktualisieren kann und der Server etwas "Luft" hat
+setTimeout(() => runMassSequence(iter + 1), MASS_STEP_DELAY_MS);
+
   }
 
   // ---------------------------------------------------------------------------
