@@ -1,243 +1,515 @@
 // ==UserScript==
-// @name         Massenraubzug schicken
-// @version      1.0
-// @description  Vorlagen fÃ¼r Massenraubzug
-// @author       Osse,TheHebel97
-// @match        https://*.die-staemme.de/game.php?*screen=place&mode=scavenge_mass*
+// @name         DS → Mass Scavenger Calculator (Simple Auto)
+// @version      0.3.1
+// @description  Nutzt die Units aus dem Massenraubzug-Snippet, teilt ausgewählte Units durch Anzahl freier Scavenges im Dorf und füllt immer den nächsten freien Slot. Auto-Loop mit Senden. Mit gespeicherten Default-Units.
+// @author       SpeckMich
+// @match        https://*.die-staemme.de/game.php?*&screen=place&mode=scavenge_mass*
+// @run-at       document-idle
 // ==/UserScript==
 
-var api = typeof unsafeWindow != 'undefined' ? unsafeWindow.ScriptAPI : window.ScriptAPI;
-api.register('480-Massenraubzug schicken', true, 'Osse, TheHebel97', 'support-nur-im-forum@die-staemme.de');
-
+/* global $, jQuery */
 (function () {
-    setTimeout(function () {
-        let storage = localStorage;
-        let templateArray = [];
-        let Temp;
-        let Start = 0;
-        if (storage.getItem("massScav") == null) {
-            storage.setItem("massScav", JSON.stringify(templateArray));
+  'use strict';
 
-        } else {
-            templateArray = JSON.parse(storage.getItem("massScav"));
+  const url = new URL(location.href);
+  const params = url.searchParams;
+  if (params.get('screen') !== 'place' || params.get('mode') !== 'scavenge_mass') return;
+
+  const API = (window.DSMassScavenger ||= {});
+
+  // ---------------------------------------------------------------------------
+  // Settings (nur aktivierte Units)
+  // ---------------------------------------------------------------------------
+
+  const LS_KEY_SETTINGS = 'DSMassScavengerSettings';
+  const DEFAULT_SETTINGS = {
+    enabledUnits: null  // null = alle an
+  };
+
+  function loadSettings() {
+    try {
+      const raw = localStorage.getItem(LS_KEY_SETTINGS);
+      if (!raw) return { ...DEFAULT_SETTINGS };
+      const parsed = JSON.parse(raw);
+      return {
+        enabledUnits: Array.isArray(parsed.enabledUnits) ? parsed.enabledUnits : null
+      };
+    } catch {
+      return { ...DEFAULT_SETTINGS };
+    }
+  }
+
+  function saveSettings(st) {
+    try {
+      localStorage.setItem(LS_KEY_SETTINGS, JSON.stringify(st));
+    } catch {
+      // ignore
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // ScavengeMassScreen-Config aus Inline-Script ziehen
+  // ---------------------------------------------------------------------------
+
+  let cachedConfig = null;
+  let villageById = null;
+
+  function extractScavengeMassArgs(txt) {
+    const marker = 'new ScavengeMassScreen';
+    let idx = txt.indexOf(marker);
+    if (idx === -1) return null;
+
+    idx = txt.indexOf('(', idx);
+    if (idx === -1) return null;
+
+    let i = idx + 1;
+    let depth = 1;
+    let inStr = false;
+    let esc = false;
+
+    for (; i < txt.length; i++) {
+      const ch = txt[i];
+
+      if (inStr) {
+        if (esc) {
+          esc = false;
+          continue;
         }
-        setupUI();
-
-        let Scav = "0000";
-        let units = [];
-        $(".unit_link:data").filter(function () {
-            units.push($(this).data("unit"))
-        });
-
-        $(document).on("click", ".changeTemplate", function () {
-            setTimeout(changeTemplatesUI, 100);
-        });
-
-        $(document).on("click", ".closeTemplate", function () {
-            setTimeout(closeTemplatesUI, 100);
-        });
-
-        $(document).on("click", ".safeTemplate", function () {
-            setTimeout(safeTemplate, 100);
-        });
-
-
-        $(document).on("click", ".DeleteTemplateBtn", function () {
-            let Val = $(".DeleteTemplate").val();
-            $(".DeleteTemplate option[value='" + Val + "']").remove();
-            $(".ScavVorlagen option[value='" + Val + "']").remove();
-            templateArray.shift(Val)
-            storage.setItem("massScav", JSON.stringify(templateArray));
-        });
-
-        $(document).on("click", ".SendScavenger", function () {
-            let Value = $(".ScavVorlagen").val()
-            if (Value !== null) {
-                Scav = templateArray[Value][4]["Combination"];
-                Start = 1;
-                Temp = Value;
-                $(".SendScavenger").css("visibility", "hidden")
-                startScavenger()
-            }
-        });
-        $(document).on("change", ".ScavVorlagen", function () {
-            $(".SendScavenger").css("visibility", "visible")
-            Start = 0;
-        });
-
-        $(".btn-send").click(function () {
-            startScavenger();
-        });
-
-        $(".btn-send-premium").click(function () {
-            setTimeout(() => {
-                sendPremium();
-            }, 200);
-        });
-
-        function sendPremium() {
-            $(".btn-confirm-yes").click(function () {
-                startScavenger();
-            });
+        if (ch === '\\') {
+          esc = true;
+          continue;
         }
-
-        function startScavenger() {
-            setTimeout(function () {
-                let Scaveng = 0;
-                let Template = Temp;
-                for (let index = 3; index > -1; index--) {
-                    const element = Scav.charAt(index)
-                    if (element === "1" && Scaveng === 0) {
-                        Scaveng = 1;
-                        Scav = Scav.replaceAt(index, "0");
-                        let TempUnits = templateArray[Template][index];
-                        for (let index_2 = 0; index_2 < TempUnits.length; index_2++) {
-                            $(".unitsInput").eq(index_2).val(TempUnits[index_2]["val"]).change();
-                        }
-                        //Um Bugs zu vermeiden, wenn man mehrfach Raubzug senden klickt
-                        $(".select-all-col").click();
-                        $(".status-inactive").click();
-                        $(".select-all-col:checked").click();
-                        $(".status-inactive:checked").click();
-                        let Val = index + 1;
-                        if ($(".option-" + Val + ".option-inactive").length === 0) {
-                            startScavenger();
-                        } 
-                        $(".select-all-col").eq(index).click();
-                        //Bugs vermeiden wenn kein Input gesetzt worden ist,obwohl es eigentlich gesetzt worden sein soll
-                        let repeat = true;
-                        for (let index_2 = 0; index_2 < TempUnits.length; index_2++) {
-                            if($(".unitsInput").eq(index_2).val() > 0){
-                                repeat = false;
-                            }
-                        }
-                        if(repeat){
-                            startScavenger();
-                        }
-                    }
-                }
-            }, 400);
+        if (ch === '"') {
+          inStr = false;
+          continue;
         }
+        continue;
+      }
 
-        function safeTemplate() {
-            let SafeTemplates = [];
-            let Combinate = "";
-            for (let index = 0; index < 4; index++) {
-                let tempArray = [];
-                let flag = false;
-                $("input[name$=_" + index + "]").each(function () {
-
-                    let name = $(this).attr('name');
-                    name = name.substring(0, name.length - 2);
-                    let val = $(this).val() == 0 ? 0 : parseInt($(this).val());
-                    if (val > 0) flag = true;
-                    let tempObj = {
-                        name: name,
-                        val: val
-                    };
-                    tempArray.push(tempObj);
-                });
-                if (flag) {
-                    Combinate += "1";
-                } else {
-                    Combinate += "0";
-                }
-                SafeTemplates.push(tempArray);
-            }
-            let tempObj = {
-                templateName: $("input[name=TemplateName]").val(),
-                Combination: Combinate
-            }
-            SafeTemplates.push(tempObj);
-
-            let incomingArray = JSON.parse(storage.getItem("massScav"));
-            incomingArray.push(SafeTemplates)
-            templateArray = incomingArray;
-            storage.setItem("massScav", JSON.stringify(incomingArray));
-            $('.ScavVorlagen').append($('<option>', {
-                value: incomingArray.length - 1,
-                text: $("input[name=TemplateName]").val()
-            }));
-            $('.DeleteTemplate').append($('<option>', {
-                value: incomingArray.length - 1,
-                text: $("input[name=TemplateName]").val()
-            }));
+      if (ch === '"') {
+        inStr = true;
+        continue;
+      }
+      if (ch === '(') {
+        depth++;
+        continue;
+      }
+      if (ch === ')') {
+        depth--;
+        if (depth === 0) {
+          return txt.slice(idx + 1, i);
         }
+      }
+    }
 
-        function closeTemplatesUI() {
-            $(".closeTemplate").remove()
-            $(".ScavTemplateTable").remove()
-            $(".safeTemplate").remove()
-            $(".TemplateName").remove()
-            $(".candidate-squad-widget").after('<button class="changeTemplate btn">Vorlagen bearbeiten</button>')
-        }
+    return null;
+  }
 
-        function changeTemplatesUI() {
-            let options;
-            let optionValue = 0;
-            templateArray.forEach(element => {
-                options += '<option value="' + optionValue + '">' + element[4]["templateName"] + '</options>';
-                optionValue += 1;
-            });
+  function parseMassConfig() {
+    if (cachedConfig && villageById) return cachedConfig;
 
-            $(".changeTemplate").remove()
-            $(".candidate-squad-widget").after('<button class="closeTemplate btn">Schlie\u00dfen</button>')
-            $(".candidate-squad-widget").after('<button class="safeTemplate btn">Vorlage speichern</button>')
+    const scripts = document.querySelectorAll('script');
+    for (const s of scripts) {
+      const txt = s.textContent || '';
+      if (!txt.includes('ScavengeMassScreen')) continue;
 
-            let TemplateName = '<label class="TemplateName"> Vorlagenname </label><input class="TemplateName input-nicer" name="TemplateName" type="text">'
-            $(".closeTemplate").after(TemplateName)
-            let table = `<table class="candidate-squad-widget ScavTemplateTable"><tbody><tr>`;
-            let img_src = $(".candidate-squad-widget > tbody > tr").eq(0).children().eq(0).find("img").attr("src");
-            img_src = img_src.replace("spear.png", "");
-            units.forEach(element => {
-                table += `<th><a href="#" class="unit_link" data-unit="${element}"><img src="` + img_src + element + `.png"></a></th>`
-            });
-            table += `<th>Vorlage</th>
-            </tr>
-            </thead>
-            <tbody>`;
+      const argsSrc = extractScavengeMassArgs(txt);
+      if (!argsSrc) continue;
 
-            for (let index = 0; index < 4; index++) {
-                table += "<tr>"
-                units.forEach(element => {
-                    table += `<td><input name="${element+"_"+index}" type="number" value="" maxlength="5" max="99999" class="unitsInput input-nicer"></td>`
-                });
-                if (index === 0) {
-                    table += "<td>Faule Sammler</td>"
-                }
-                if (index === 1) {
-                    table += "<td>Bescheidene Sammler</td>"
-                }
-                if (index === 2) {
-                    table += "<td>Kluge Sammler</td>"
-                }
-                if (index === 3) {
-                    table += "<td>GroÃŸartige Sammler</td>"
-                }
-                table += "</tr>"
-            }
+      try {
+        const wrapped = '[' + argsSrc + ']';
+        const arr = JSON.parse(wrapped);
+        const options  = arr[0];
+        const unitDefs = arr[1];
+        const speed    = arr[2];
+        const villages = arr[3];
 
-            $(".closeTemplate").after(table)
-            $(".TemplateName").eq(1).after('<td><select class="DeleteTemplate TemplateName">' + options + '</select></td>');
-            $(".DeleteTemplate").after('<button class="btn TemplateName DeleteTemplateBtn"> Vorlage l\u00f6schen </button>')
-        }
+        cachedConfig = { options, unitDefs, speed, villages };
 
-        function setupUI() {
-            let options;
-            let optionValue = 0;
-            templateArray.forEach(element => {
-                options += '<option value="' + optionValue + '">' + element[4]["templateName"] + '</options>';
-                optionValue += 1;
-            });
-            $(".candidate-squad-widget > tbody > tr").eq(0).append("<th>Vorlage</th>");
-            $(".candidate-squad-widget > tbody > tr").eq(1).append('<td><select class="ScavVorlagen">' + options + '</select></td>');
-            $(".candidate-squad-widget > tbody > tr").eq(0).append("<th>Senden</th>");
-            $(".candidate-squad-widget > tbody > tr").eq(1).append('<td><button class="SendScavenger btn">Raubzug senden</button></td>');
-            $(".candidate-squad-widget").after('<button class="changeTemplate btn">Vorlagen bearbeiten</button>')
+        villageById = new Map();
+        (villages || []).forEach(v => {
+          if (v && v.village_id != null) {
+            villageById.set(String(v.village_id), v);
+          }
+        });
 
-        }
-        String.prototype.replaceAt = function (index, replacement) {
-            return this.substr(0, index) + replacement + this.substr(index + replacement.length);
-        }
-    }, 100);
+        return cachedConfig;
+      } catch (e) {
+        console.error('[DSMassScavenger] Fehler beim Parsen von ScavengeMassScreen:', e);
+      }
+    }
+
+    console.warn('[DSMassScavenger] Konnte ScavengeMassScreen-Config nicht finden.');
+    return null;
+  }
+
+  // ---------------------------------------------------------------------------
+  // UI: vorhandene candidate-squad-widget Tabelle + Settingsleisten
+  // ---------------------------------------------------------------------------
+
+  function ensureMassUi() {
+    const $grid = jQuery('#scavenge_mass_screen .candidate-squad-widget');
+    if (!$grid.length) return;
+
+    const $tbody = $grid.find('> tbody');
+    if (!$tbody.length) return;
+
+    const $headerRow = $tbody.find('> tr').eq(0);
+    const $inputRow  = $tbody.find('> tr').eq(1);
+
+    if (!$headerRow.length || !$inputRow.length) return;
+    if ($grid.data('ds-mass-ui-ready')) return;
+
+    const settings = loadSettings();
+
+    // --- Header: Unit-Icons + CheckboxTroops ---
+
+    $headerRow.find('a.unit_link').each(function () {
+      const unit = jQuery(this).attr('data-unit');
+      if (!unit) return;
+      const $th = jQuery(this).parent();
+
+      if ($th.find('input.checkboxTroops[unit]').length) return;
+
+      const checked =
+        !settings.enabledUnits || settings.enabledUnits.includes(unit);
+
+      $th.append(
+        `<input class="checkboxTroops" type="checkbox" ${checked ? 'checked' : ''} style="width:20%;" unit="${unit}">`
+      );
+    });
+
+    // zusätzliche Spalten (wie in deinem Ziel-HTML)
+    if (!$headerRow.find('th.squad-village-required').length) {
+      $headerRow.append('<th class="squad-village-required">Alle</th>');
+    }
+    if ($headerRow.find('th:has(.icon.header.res)').length === 0) {
+      $headerRow.append('<th><span class="icon header res"></span></th>');
+    }
+    if ($headerRow.find('th:contains("Senden")').length === 0) {
+      $headerRow.append('<th>Senden</th>');
+    }
+
+    // Input-Zeile: Fill-All, carry-max, Button
+    if ($inputRow.find('a.fill-all').length === 0) {
+      $inputRow.append(
+        '<td class="squad-village-required"><a class="fill-all" href="#">Alle Truppen</a></td>'
+      );
+    }
+    if ($inputRow.find('td.carry-max').length === 0) {
+      $inputRow.append('<td class="carry-max">0</td>');
+    }
+    if ($inputRow.find('button.SendMassScav').length === 0) {
+      $inputRow.append(
+        '<td><button class="SendMassScav btn">Massen-Raubzug senden</button></td>'
+      );
+    }
+    if ($inputRow.find('button.infoSendMassScav').length === 0) {
+      $inputRow.append(
+        '<td>Achtung! Die Raubzüge werden direkt gesendet, prüfe ob die Unit-Checks links korrekt gesetzt sind</td>'
+      );
+    }
+
+    // Settings-Leiste: Default speichern / löschen
+    if (!document.getElementById('ds-mass-scav-settings')) {
+      const controlsHtml = `
+        <div id="ds-mass-scav-settings" style="margin:6px 0 10px 0;display:flex;gap:10px;align-items:center;">
+          <span style="font-weight:bold;">Mass-Scav Settings:</span>
+          <button class="ds-mass-save btn">Default speichern</button>
+          <button class="ds-mass-clear btn">Default löschen</button>
+          <span style="font-size:11px;opacity:.7;">(merkt sich, welche Units-Checkboxen aktiv sind)</span>
+        </div>`;
+      $grid.before(controlsHtml);
+    }
+
+    // --- Events --------------------------------------------------------------
+
+    // Fill-All: nur aktivierte Units füllen
+    $grid.on('click', 'a.fill-all', function (e) {
+      e.preventDefault();
+      const enabledUnits = collectEnabledUnits();
+      enabledUnits.forEach(unit => {
+        const $allLink =
+          $inputRow.find(`a.units-entry-all[data-unit="${unit}"]`).first();
+        if ($allLink.length) $allLink.trigger('click');
+      });
+    });
+
+    // Auto-Sequenz starten/stoppen
+    $grid.on('click', 'button.SendMassScav', function (e) {
+      e.preventDefault();
+
+      if (MASS_RUN_ACTIVE) {
+        console.log('[DSMassScavenger] Stoppe Auto-Sequenz.');
+        MASS_RUN_ACTIVE = false;
+        return;
+      }
+
+      console.log('[DSMassScavenger] Starte Auto-Sequenz.');
+      MASS_RUN_ACTIVE = true;
+      MASS_ITER = 0;
+      runMassSequence();
+    });
+
+    // Defaults speichern
+    jQuery(document).on('click', '.ds-mass-save', function (e) {
+      e.preventDefault();
+      const enabled = collectEnabledUnits();
+      const st = { enabledUnits: enabled.length ? enabled : null };
+      saveSettings(st);
+      console.log('[DSMassScavenger] Defaults gespeichert:', st);
+    });
+
+    // Defaults löschen → alle Units aktiv
+    jQuery(document).on('click', '.ds-mass-clear', function (e) {
+      e.preventDefault();
+      localStorage.removeItem(LS_KEY_SETTINGS);
+      jQuery('#scavenge_mass_screen .candidate-squad-widget input.checkboxTroops[unit]')
+        .prop('checked', true);
+      console.log('[DSMassScavenger] Defaults gelöscht, alle Units aktiviert.');
+    });
+
+    $grid.data('ds-mass-ui-ready', true);
+  }
+
+  function collectEnabledUnits() {
+    const units = [];
+    jQuery('#scavenge_mass_screen .candidate-squad-widget input.checkboxTroops[unit]').each(function () {
+      const $cb = jQuery(this);
+      if ($cb.is(':checked')) {
+        const unit = $cb.attr('unit');
+        if (unit) units.push(unit);
+      }
+    });
+    return units;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Kernlogik: freie Slots finden → Units (home / #freieSlots) → Inputs füllen → Slot selektieren
+  // ---------------------------------------------------------------------------
+
+  function findAllInactiveCells() {
+    const cells = [];
+    const rows = document.querySelectorAll(
+      '#scavenge_mass_screen .mass-scavenge-table tr[id^="scavenge_village_"]'
+    );
+
+    rows.forEach(row => {
+      const villageId = row.getAttribute('data-id') || row.id.replace('scavenge_village_', '');
+      const optCells = row.querySelectorAll('td.option.option-inactive[data-id]');
+      optCells.forEach(cell => {
+        const optIdStr = cell.getAttribute('data-id');
+        const optId = optIdStr ? parseInt(optIdStr, 10) : NaN;
+        if (!Number.isFinite(optId)) return;
+        cells.push({
+          row,
+          cell,
+          villageId: String(villageId),
+          optionId: optId
+        });
+      });
+    });
+
+    cells.sort((a, b) => {
+      const aid = parseInt(a.villageId, 10);
+      const bid = parseInt(b.villageId, 10);
+      if (aid !== bid) return aid - bid;
+      return a.optionId - b.optionId;
+    });
+
+    return cells;
+  }
+
+  // divisor = Anzahl verfügbarer Slots in diesem Dorf (mind. 1)
+  function fillTemplateForVillage(village, enabledUnits, divisor) {
+    const inputs = jQuery('#scavenge_mass_screen .candidate-squad-widget input.unitsInput[name]');
+    if (!inputs.length) return false;
+
+    const perUnit = {};
+    const div = divisor > 0 ? divisor : 1;
+
+    enabledUnits.forEach(unit => {
+      const home = (village.unit_counts_home && village.unit_counts_home[unit]) || 0;
+      perUnit[unit] = Math.floor(home / div);
+    });
+
+    console.log('[DSMassScavenger] perUnit (home / freieSlots)', {
+      village_id: village.village_id,
+      divisor: div,
+      perUnit
+    });
+
+    let total = 0;
+
+    inputs.each(function () {
+      const $inp = jQuery(this);
+      const unit = $inp.attr('name');
+      if (!unit) return;
+      const val = perUnit[unit] || 0;
+      total += val;
+      if (val > 0) {
+        $inp.val(String(val));
+      } else {
+        $inp.val('');
+      }
+      $inp.trigger('input').trigger('keyup').trigger('change');
+    });
+
+    return total > 0;
+  }
+
+  function clearAllSelections() {
+    const $tbl = jQuery('#scavenge_mass_screen .mass-scavenge-table');
+
+    $tbl.find('input.status-inactive:checked').each(function () {
+      this.click();
+    });
+    $tbl.find('input.select-all-col:checked').each(function () {
+      this.click();
+    });
+    $tbl.find('input.select-all-row:checked').each(function () {
+      this.click();
+    });
+  }
+
+  function selectCell(cellObj) {
+    const { cell } = cellObj;
+    const cb = cell.querySelector('input.status-inactive');
+    if (cb) {
+      if (!cb.checked) cb.click();
+      return cb.checked;
+    }
+    cell.click();
+    return true;
+  }
+
+  function planNextSlot() {
+    const cfg = parseMassConfig();
+    if (!cfg || !villageById) {
+      console.warn('[DSMassScavenger] keine Config → Abbruch');
+      return -1;
+    }
+
+    const enabledUnits = collectEnabledUnits();
+    if (!enabledUnits.length) {
+      console.warn('[DSMassScavenger] keine Units aktiviert → Abbruch');
+      return -1;
+    }
+
+    const inactiveCells = findAllInactiveCells();
+    if (!inactiveCells.length) {
+      console.log('[DSMassScavenger] keine option-inactive Zellen gefunden');
+      return -1;
+    }
+
+    const target = inactiveCells[0];
+    const village = villageById.get(String(target.villageId));
+    if (!village) {
+      console.warn('[DSMassScavenger] Dorf nicht in JSON gefunden:', target.villageId);
+      return -1;
+    }
+
+    // Anzahl freier Slots in DIESEM Dorf als Divisor
+    const freeForVillage = inactiveCells.filter(
+      c => c.villageId === target.villageId
+    ).length || 1;
+
+    console.log(
+      '[DSMassScavenger] Nutze Dorf',
+      village.village_id,
+      `"${village.village_name}"`,
+      'für Slot',
+      target.optionId,
+      '– freie Slots in diesem Dorf:',
+      freeForVillage
+    );
+
+    const hasUnits = fillTemplateForVillage(village, enabledUnits, freeForVillage);
+    if (!hasUnits) {
+      console.log('[DSMassScavenger] keine sendbaren Units → Abbruch');
+      return -1;
+    }
+
+    clearAllSelections();
+
+    const ok = selectCell(target);
+    if (!ok) {
+      console.warn('[DSMassScavenger] konnte Slot nicht selektieren → Abbruch');
+      return -1;
+    }
+
+    const $btn = jQuery('#scavenge_mass_screen .buttons-container .btn-send');
+    if ($btn.length) $btn.removeAttr('disabled');
+
+    return 0;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Auto-Sequenz
+  // ---------------------------------------------------------------------------
+
+  let MASS_RUN_ACTIVE = false;
+  let MASS_ITER = 0;
+  const MASS_ITER_LIMIT = 50;
+  const MASS_DELAY_MS = 900;
+
+  function runMassSequence() {
+    if (!MASS_RUN_ACTIVE) {
+      console.log('[DSMassScavenger] MASS_RUN_ACTIVE=false → Sequenz beendet.');
+      return;
+    }
+
+    MASS_ITER++;
+    if (MASS_ITER > MASS_ITER_LIMIT) {
+      console.warn('[DSMassScavenger] Sicherheitslimit erreicht → Sequenz gestoppt.');
+      MASS_RUN_ACTIVE = false;
+      return;
+    }
+
+    console.group(`[DSMassScavenger] Iteration #${MASS_ITER}`);
+
+    const res = planNextSlot();
+    if (res !== 0) {
+      console.log('[DSMassScavenger] planNextSlot() →', res, '→ nichts mehr zu tun, stoppe.');
+      MASS_RUN_ACTIVE = false;
+      console.groupEnd();
+      return;
+    }
+
+    const $btn = jQuery('#scavenge_mass_screen .buttons-container .btn-send');
+    const btnEl = $btn.get(0);
+    console.log('Senden-Button:', btnEl);
+
+    if (!$btn.length || btnEl.disabled) {
+      console.warn('[DSMassScavenger] Senden-Button fehlt/disabled → Sequenz gestoppt.');
+      MASS_RUN_ACTIVE = false;
+      console.groupEnd();
+      return;
+    }
+
+    console.log('[DSMassScavenger] Klicke offiziellen Senden-Button.');
+    $btn.click();
+
+    console.groupEnd();
+
+    setTimeout(runMassSequence, MASS_DELAY_MS);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Public API
+  // ---------------------------------------------------------------------------
+
+  API.isReady = () => !!document.querySelector('#scavenge_mass_screen .candidate-squad-widget');
+  API.planNextSlot = planNextSlot;
+
+  // ---------------------------------------------------------------------------
+  // Boot
+  // ---------------------------------------------------------------------------
+
+  const bootIv = setInterval(() => {
+    if (document.querySelector('#scavenge_mass_screen .candidate-squad-widget')) {
+      clearInterval(bootIv);
+      ensureMassUi();
+    }
+  }, 50);
 })();

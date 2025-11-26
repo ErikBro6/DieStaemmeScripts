@@ -143,7 +143,6 @@
           <input id="autoEnabledBox" type="checkbox" ${autoEnabled ? 'checked' : ''}>
           Auto Raubzug
         </label>
-        <span id="autoLast" style="opacity:.8"></span>
       </div>
     `);
     jQuery('body').append(box);
