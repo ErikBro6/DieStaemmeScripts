@@ -145,6 +145,13 @@ win.TWLD_data = [
 			// override map functions 
 			this.Override.override(this.map);
 
+			try {
+				this.map.map.reload();
+				this.map.minimap && this.map.minimap.reload();
+			} catch (e) {
+				console.log("[TWLineDrawer] initial reload failed:", e);
+			}
+
 			// if scale preset is not 1, rescale map
 			if (this.scale != 1) {
 				// wait till map is loaded then resize it
