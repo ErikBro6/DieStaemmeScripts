@@ -287,39 +287,57 @@
   // ---------------------------------------------------------------------------
   // Kernlogik: freie Slots finden → Units (home / #freieSlots) → Inputs füllen → Slot selektieren
   // ---------------------------------------------------------------------------
+function findAllInactiveCells() {
+  console.group('[DSMassScavenger][DEBUG] findAllInactiveCells()');
 
-  function findAllInactiveCells() {
-    const cells = [];
-    const rows = document.querySelectorAll(
-      '#scavenge_mass_screen .mass-scavenge-table tr[id^="scavenge_village_"]'
-    );
+  const cells = [];
+  const rows = document.querySelectorAll(
+    '#scavenge_mass_screen .mass-scavenge-table tr[id^="scavenge_village_"]'
+  );
 
-    rows.forEach(row => {
-      const villageId = row.getAttribute('data-id') || row.id.replace('scavenge_village_', '');
-      const optCells = row.querySelectorAll('td.option.option-inactive[data-id]');
-      optCells.forEach(cell => {
-        const optIdStr = cell.getAttribute('data-id');
-        const optId = optIdStr ? parseInt(optIdStr, 10) : NaN;
-        if (!Number.isFinite(optId)) return;
-        cells.push({
-          row,
-          cell,
-          villageId: String(villageId),
-          optionId: optId
-        });
+  rows.forEach(row => {
+    const villageId = row.getAttribute('data-id') || row.id.replace('scavenge_village_', '');
+    const optCells = row.querySelectorAll('td.option[data-id]');
+
+    console.log(`\n▶ Dorf ${villageId}: Prüfe ${optCells.length} Slots`);
+
+    optCells.forEach(cell => {
+      const optId = parseInt(cell.getAttribute('data-id'), 10);
+      if (!Number.isFinite(optId)) return;
+
+      const inactive = cell.classList.contains('option-inactive');
+      const locked   = cell.classList.contains('option-locked');
+
+      console.log(
+        `  Slot ${optId}: inactive=${inactive}, locked=${locked}, classes="${cell.className}"`
+      );
+
+      if (!inactive) {
+        console.log("    ✘ ausgeschlossen → nicht inactive");
+        return;
+      }
+      if (locked) {
+        console.log("    ✘ ausgeschlossen → locked");
+        return;
+      }
+
+      console.log("    ✔ akzeptiert → freier Slot");
+
+      cells.push({
+        row,
+        cell,
+        villageId: String(villageId),
+        optionId: optId
       });
     });
+  });
 
-    cells.sort((a, b) => {
-      const aid = parseInt(a.villageId, 10);
-      const bid = parseInt(b.villageId, 10);
-      if (aid !== bid) return aid - bid;
-      return a.optionId - b.optionId;
-    });
+  console.log(`\nErgebnis → ${cells.length} echte freie Slots`);
+  cells.forEach(c => console.log(`  ✔ Dorf ${c.villageId}, Slot ${c.optionId}`));
+  console.groupEnd();
 
-    return cells;
-  }
-
+  return cells;
+}
 
 
   // virtueller Rest-Pool pro Dorf, damit die Truppen fair auf alle freien Slots verteilt werden
