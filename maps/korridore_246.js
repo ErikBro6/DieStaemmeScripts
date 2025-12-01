@@ -1,0 +1,1 @@
+[{"name":"Credits","mapColor":"#ffffff","mapWidth":"5px","drawOnMini":false,"miniColor":"#ffffff","miniWidth":"1.5px","lines":[[[[509,599],[509,600],[510,600],[510,599],[509,599]]]],"labelsColor":"#000000","labelsFontSize":"bold 16px","labelsRoot":"center","labels":[[[509,599],"Macher"]],"selected":false,"show":true}]

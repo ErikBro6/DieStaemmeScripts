@@ -1,1 +1,0 @@
-[{"name":"Macher","mapColor":"#ffffff","mapWidth":"5px","drawOnMini":false,"miniColor":"#ffffff","miniWidth":"1.5px","lines":[[[[562,608],[563,608],[562,608],[562,609],[562,608],[563,608],[562,608],[562,609],[563,609],[563,608]]]],"labelsColor":"#000000","labelsFontSize":"bold 16px","labelsRoot":"center","labels":[[[562,608],"Macher"]],"selected":false,"show":true}]
