@@ -49,7 +49,10 @@ function waitForKeyElements(selector, handler) {
   // --- Original-Variablen / State (Keys unverändert gelassen) ---
   let unitsToSend = JSON.parse(localStorage.getItem('unitsToSend')) || {
     spear: 0,
+    sword: 0,
+    axe: 0,
     light: 0,
+
   };
 
   let radius               = parseInt(localStorage.getItem('farmingRadius')) || 5;
