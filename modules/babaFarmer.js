@@ -12,6 +12,14 @@
   if (screen !== 'place') return;
   if (mode === 'scavenge' || mode === 'scavenge_mass' || mode === 'call') return;
 
+  // --- Context-Gate ...
+
+// --- BOT-PROTECTION ---
+const { gateInterval, gateTimeout, guardAction } = window.DSGuards || {};
+if (!guardAction) {
+  console.warn("[BabaFarmer] DSGuards fehlen – Bot-Protection deaktiviert.");
+}
+
   // --- Hilfsfunktion: GM-XMLHttpRequest kompatibel holen ---
   const gmXhr = (typeof GM_xmlhttpRequest === 'function')
     ? GM_xmlhttpRequest
@@ -166,41 +174,34 @@ function waitForKeyElements(selector, handler) {
     return Math.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2);
   }
 
-function fillUnitsAndSend(coords) {
+async function fillUnitsAndSend(coords) {
   console.log('[BabaFarmer] Attacking:', coords);
 
-  // Koordinaten setzen
-  waitForKeyElements('input[name="x"]', input => {
-    input.value = coords.x;
-  });
+  if (guardAction) await guardAction("baba_fill_coords");
 
-  waitForKeyElements('input[name="y"]', input => {
-    input.value = coords.y;
-  });
+  waitForKeyElements('input[name="x"]', input => input.value = coords.x);
+  waitForKeyElements('input[name="y"]', input => input.value = coords.y);
 
-  // Einheiten setzen
   for (const [unit, amount] of Object.entries(unitsToSend)) {
-    waitForKeyElements(`input[name="${unit}"]`, input => {
-      input.value = amount;
-    });
+    waitForKeyElements(`input[name="${unit}"]`, input => input.value = amount);
   }
 
   let nextPosition = parseInt(localStorage.getItem('position')) + 1;
   localStorage.setItem('position', nextPosition);
 
-  // Barbar / Spieler-Check
-  waitForKeyElements('.village-info', infoSpan => {
+  waitForKeyElements('.village-info', async infoSpan => {
     const ownerInfo = infoSpan.textContent || '';
 
     if (ownerInfo.includes('Besitzer: Barbaren')) {
-      // Angriff senden
-      waitForKeyElements('#target_attack', attackButton => {
+      waitForKeyElements('#target_attack', async attackButton => {
+        if (guardAction) await guardAction("baba_send_attack");
         attackButton.click();
       });
     } else {
-      console.log('[BabaFarmer] Ziel ist Spieler, lösche Eintrag und reloade.');
+      console.log('[BabaFarmer] Ziel ist Spieler — Entry löschen.');
 
-      waitForKeyElements('img.village-delete', deleteIcon => {
+      waitForKeyElements('img.village-delete', async deleteIcon => {
+        if (guardAction) await guardAction("baba_delete_nonbarb");
         deleteIcon.click();
         setTimeout(() => location.reload(), farmingIntervalDelay);
       });
@@ -274,17 +275,19 @@ function fillUnitsAndSend(coords) {
     }
   }
 
-  function startFarming() {
-    if (!farmingInterval) {
+async function startFarming() {
+  if (!farmingInterval) {
+    farmBarbarians().catch(err => console.error('[BabaFarmer] farmBarbarians() failed:', err));
+
+    farmingInterval = setInterval(async () => {
+      if (!farmingEnabled) return;
+      if (guardAction) await guardAction("baba_loop_tick");
+
       farmBarbarians().catch(err => console.error('[BabaFarmer] farmBarbarians() failed:', err));
-      farmingInterval = setInterval(() => {
-        if (farmingEnabled) {
-          farmBarbarians().catch(err => console.error('[BabaFarmer] farmBarbarians() failed:', err));
-        }
-      }, farmingIntervalDelay);
-      console.log('[BabaFarmer] Farming started.');
-    }
+    }, farmingIntervalDelay);
   }
+}
+
 
   function stopFarming() {
     if (farmingInterval) {
@@ -325,21 +328,28 @@ function fillUnitsAndSend(coords) {
     document.body.appendChild(toggleButton);
   }
 
-  function observeConfirmButton() {
-    const observer = new MutationObserver((mutations, obs) => {
-      const button = document.getElementById('troop_confirm_submit');
-      if (button) {
-        console.log('[BabaFarmer] Auto-confirm send.');
-        button.click();
-        obs.disconnect();
-      }
-    });
+function observeConfirmButton() {
+  const observer = new MutationObserver(async (mutations, obs) => {
+    const button = document.getElementById('troop_confirm_submit');
+    if (!button) return;
 
-    observer.observe(document.body || document.documentElement, {
-      childList: true,
-      subtree: true,
-    });
-  }
+    console.log('[BabaFarmer] Auto-confirm send.');
+
+    if (guardAction) await guardAction("baba_confirm_click");
+    button.click();
+
+    obs.disconnect();
+  });
+
+  observer.observe(document.body || document.documentElement, {
+    childList: true,
+    subtree: true,
+  });
+}
+
+
+
+
 
   // --- Initialisierung nach DOM-Ready ---
   function init() {
