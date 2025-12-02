@@ -269,7 +269,7 @@ async function fillUnitsAndSend(coords) {
     const targetVillage = nearbyBarbarians[position];
 
     if (targetVillage) {
-      fillUnitsAndSend({ x: targetVillage.x, y: targetVillage.y });
+      await fillUnitsAndSend({ x: targetVillage.x, y: targetVillage.y });
     } else {
       console.log('[BabaFarmer] No valid target found at position', position);
     }
