@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         DS → Mass Scavenger Calculator (Simple Auto)
-// @version      0.3.1
-// @description  Nutzt die Units aus dem Massenraubzug-Snippet, teilt ausgewählte Units durch Anzahl freier Scavenges im Dorf und füllt immer den nächsten freien Slot. Auto-Loop mit Senden. Mit gespeicherten Default-Units.
+// @name         DS → Mass Scavenger Calculator (Simple Auto + Per-Village Max)
+// @version      0.5.1
+// @description  Nutzt die Units aus dem Massenraubzug-Snippet, teilt ausgewählte Units durch Anzahl Scavenges im Dorf und füllt immer den nächsten freien Slot. Auto-Loop mit Senden. Pro Dorf: aktivierbare Units + Max je Unit (Max wird auf alle Slots des Dorfs verteilt, z.B. 200/4=50).
 // @author       SpeckMich
 // @match        https://*.die-staemme.de/game.php?*&screen=place&mode=scavenge_mass*
 // @run-at       document-idle
@@ -18,12 +18,13 @@
   const API = (window.DSMassScavenger ||= {});
 
   // ---------------------------------------------------------------------------
-  // Settings (nur aktivierte Units)
+  // Settings (pro Dorf: Units + Max je Unit)
   // ---------------------------------------------------------------------------
 
   const LS_KEY_SETTINGS = 'DSMassScavengerSettings';
   const DEFAULT_SETTINGS = {
-    enabledUnits: null  // null = alle an
+    enabledUnits: null,   // legacy: globale Units (Fallback)
+    perVillage: {}        // { [villageId]: { units: string[]|null, max: { [unit]: number } } }
   };
 
   function loadSettings() {
@@ -31,8 +32,18 @@
       const raw = localStorage.getItem(LS_KEY_SETTINGS);
       if (!raw) return { ...DEFAULT_SETTINGS };
       const parsed = JSON.parse(raw);
+
+      const enabledUnits =
+        Array.isArray(parsed.enabledUnits) ? parsed.enabledUnits : null;
+
+      const perVillage =
+        parsed.perVillage && typeof parsed.perVillage === 'object'
+          ? parsed.perVillage
+          : {};
+
       return {
-        enabledUnits: Array.isArray(parsed.enabledUnits) ? parsed.enabledUnits : null
+        enabledUnits,
+        perVillage
       };
     } catch {
       return { ...DEFAULT_SETTINGS };
@@ -41,10 +52,55 @@
 
   function saveSettings(st) {
     try {
-      localStorage.setItem(LS_KEY_SETTINGS, JSON.stringify(st));
+      const safe = {
+        enabledUnits: Array.isArray(st.enabledUnits) && st.enabledUnits.length ? st.enabledUnits : null,
+        perVillage: st.perVillage && typeof st.perVillage === 'object' ? st.perVillage : {}
+      };
+      localStorage.setItem(LS_KEY_SETTINGS, JSON.stringify(safe));
     } catch {
       // ignore
     }
+  }
+
+  function getVillageConfig(villageId) {
+    const vKey = String(villageId);
+    const st = loadSettings();
+    const perVillage = st.perVillage || {};
+    const raw = perVillage[vKey];
+
+    const cfg = {
+      units: null,
+      max: {}
+    };
+
+    if (!raw) {
+      // kein Dorf-spezifisches Setting: Units ggf. aus globalen
+      cfg.units = Array.isArray(st.enabledUnits) ? st.enabledUnits.slice() : null;
+      return cfg;
+    }
+
+    // Legacy: perVillage[vId] war direkt ein Array
+    if (Array.isArray(raw)) {
+      cfg.units = raw.slice();
+      return cfg;
+    }
+
+    // Neue Struktur: Objekt
+    if (typeof raw === 'object') {
+      if (Array.isArray(raw.units)) {
+        cfg.units = raw.units.slice();
+      } else if (Array.isArray(st.enabledUnits)) {
+        cfg.units = st.enabledUnits.slice();
+      } else {
+        cfg.units = null;
+      }
+
+      if (raw.max && typeof raw.max === 'object') {
+        cfg.max = { ...raw.max };
+      }
+    }
+
+    return cfg;
   }
 
   // ---------------------------------------------------------------------------
@@ -147,8 +203,152 @@
   // UI: vorhandene candidate-squad-widget Tabelle + Settingsleisten
   // ---------------------------------------------------------------------------
 
+  function buildVillageUnitUI(row, villageId, unitDefs) {
+    if (!unitDefs) return;
+    if (row.nextSibling && row.nextSibling.classList && row.nextSibling.classList.contains('ds-mass-village-units-row')) {
+      return; // schon gebaut
+    }
+
+    const vKey = String(villageId);
+    const vCfg = getVillageConfig(vKey);
+    const enabledForVillage = vCfg.units;
+    const maxCfg = vCfg.max || {};
+
+const outerTr = document.createElement('tr');
+outerTr.className = 'ds-mass-village-units-row';
+
+// LEFT COLUMN
+const leftTd = document.createElement('td');
+leftTd.style.verticalAlign = "top";
+leftTd.style.fontWeight = "bold";
+leftTd.style.whiteSpace = "nowrap";
+leftTd.style.width = "160px";
+const link = row.cells[0].querySelector("a");
+leftTd.appendChild(link.cloneNode(true));
+
+outerTr.appendChild(leftTd);
+
+// RIGHT COLUMN
+const rightTd = document.createElement('td');
+rightTd.colSpan = row.cells.length;
+
+
+// EXPLANATION ABOVE TABLE
+const expl = document.createElement('div');
+expl.textContent = "Einheiten auswählen & maximale Menge festlegen (gesamt, verteilt auf alle Slots):";
+expl.style.fontSize = "11px";
+expl.style.marginBottom = "4px";
+rightTd.appendChild(expl);
+
+// NOW CREATE THE TABLE
+const table = document.createElement('table');
+table.className = 'candidate-squad-widget vis ds-mass-config';
+table.style.width = "auto";
+table.style.marginLeft = "10px";
+
+const tbody = document.createElement('tbody');
+
+// HEADER
+const headerTr = document.createElement('tr');
+
+// NEW: Explanation column header
+const explainHeader = document.createElement('th');
+explainHeader.textContent = "Einheit";
+explainHeader.style.whiteSpace = "nowrap";
+headerTr.appendChild(explainHeader);
+
+// THEN the unit-icon headers
+Object.keys(unitDefs).forEach(unit => {
+
+    const def = unitDefs[unit] || {};
+    const name = def.name || unit;
+
+    const th = document.createElement('th');
+    th.style.width = "48px";
+th.style.textAlign = "center";
+
+    const a = document.createElement('a');
+    a.href = "#";
+    a.className = "unit_link";
+    a.dataset.unit = unit;
+
+    const img = document.createElement('img');
+    img.src = `/graphic/unit/unit_${unit}.png`;
+    img.dataset.title = name;
+
+    a.appendChild(img);
+    th.appendChild(a);
+    headerTr.appendChild(th);
+});
+tbody.appendChild(headerTr);
+
+// SECOND ROW → check + max
+const inputTr = document.createElement('tr');
+
+// NEW: Explanation cell for row
+const explainCell = document.createElement('td');
+explainCell.textContent = "Aktiv / Max";
+explainCell.style.fontSize = "11px";
+explainCell.style.whiteSpace = "nowrap";
+inputTr.appendChild(explainCell);
+
+// THEN the actual unit input cells
+Object.keys(unitDefs).forEach(unit => {
+
+    const def = unitDefs[unit] || {};
+    const name = def.name || unit;
+
+    const tdCell = document.createElement('td');
+tdCell.style.width = "48px";
+tdCell.style.textAlign = "center";
+
+    const cb = document.createElement('input');
+    cb.type = "checkbox";
+    cb.className = "villageUnitToggle";
+    cb.dataset.village = vKey;
+    cb.dataset.unit = unit;
+    cb.disabled = false;
+
+
+    const isEnabledDefault =
+        !enabledForVillage || !enabledForVillage.length || enabledForVillage.includes(unit);
+    if (isEnabledDefault) cb.checked = true;
+
+    const maxInput = document.createElement('input');
+    maxInput.type = "number";
+    maxInput.min = "0";
+    maxInput.className = "input-nicer villageUnitMax";
+    maxInput.dataset.village = vKey;
+    maxInput.dataset.unit = unit;
+    maxInput.style.width = "55px";
+
+    const maxVal = maxCfg[unit];
+    if (Number.isFinite(maxVal) && maxVal > 0) maxInput.value = String(maxVal);
+
+    tdCell.appendChild(cb);
+    tdCell.appendChild(maxInput);
+    inputTr.appendChild(tdCell);
+});
+tbody.appendChild(inputTr);
+
+table.appendChild(tbody);
+
+// WRAP + ATTACH
+const wrap = document.createElement('div');
+wrap.className = "ds-mass-village-units";
+wrap.appendChild(table);
+
+rightTd.appendChild(wrap);
+outerTr.appendChild(rightTd);
+
+// INSERT ROW BELOW VILLAGE ROW
+row.parentNode.insertBefore(outerTr, row.nextSibling);
+
+  }
+
   function ensureMassUi() {
-    const $grid = jQuery('#scavenge_mass_screen .candidate-squad-widget');
+    // Nur das "offizielle" candidate-squad-widget benutzen, nicht die pro-Dorf-Config-Widgets
+    const $grid = jQuery('#scavenge_mass_screen .candidate-squad-widget').not('.ds-mass-config').first();
     if (!$grid.length) return;
 
     const $tbody = $grid.find('> tbody');
@@ -162,24 +362,7 @@
 
     const settings = loadSettings();
 
-    // --- Header: Unit-Icons + CheckboxTroops ---
-
-    $headerRow.find('a.unit_link').each(function () {
-      const unit = jQuery(this).attr('data-unit');
-      if (!unit) return;
-      const $th = jQuery(this).parent();
-
-      if ($th.find('input.checkboxTroops[unit]').length) return;
-
-      const checked =
-        !settings.enabledUnits || settings.enabledUnits.includes(unit);
-
-      $th.append(
-        `<input class="checkboxTroops" type="checkbox" ${checked ? 'checked' : ''} style="width:20%;" unit="${unit}">`
-      );
-    });
-
-    // zusätzliche Spalten (wie in deinem Ziel-HTML)
+    // zusätzliche Spalten (wie gewohnt)
     if (!$headerRow.find('th.squad-village-required').length) {
       $headerRow.append('<th class="squad-village-required">Alle</th>');
     }
@@ -204,30 +387,68 @@
         '<td><button class="SendMassScav btn">Massen-Raubzug senden</button></td>'
       );
     }
-    if ($inputRow.find('button.infoSendMassScav').length === 0) {
+    if ($inputRow.find('td:contains("Raubzüge werden direkt gesendet")').length === 0) {
       $inputRow.append(
-        '<td>Achtung! Die Raubzüge werden direkt gesendet, prüfe ob die Unit-Checks links korrekt gesetzt sind</td>'
+        '<td>Achtung! Die Raubzüge werden direkt gesendet, prüfe ob die Unit- und Max-Settings unter den Dörfern korrekt gesetzt sind.</td>'
       );
     }
 
-    // Settings-Leiste: Default speichern / löschen
+    // Settings-Leiste: Default speichern / löschen (pro Dorf)
     if (!document.getElementById('ds-mass-scav-settings')) {
       const controlsHtml = `
         <div id="ds-mass-scav-settings" style="margin:6px 0 10px 0;display:flex;gap:10px;align-items:center;">
           <span style="font-weight:bold;">Mass-Scav Settings:</span>
-          <button class="ds-mass-save btn">Default speichern</button>
-          <button class="ds-mass-clear btn">Default löschen</button>
-          <span style="font-size:11px;opacity:.7;">(merkt sich, welche Units-Checkboxen aktiv sind)</span>
+          <button class="ds-mass-save btn">Defaults speichern</button>
+          <button class="ds-mass-clear btn">Defaults löschen</button>
+          <span style="font-size:11px;opacity:.7;">(merkt sich aktivierte Units & Max-Werte pro Dorf)</span>
         </div>`;
       $grid.before(controlsHtml);
     }
 
+    // Pro-Dorf-Config-Widgets bauen
+    const cfg = parseMassConfig();
+    if (cfg && cfg.villages && cfg.villages.length) {
+      const rows = document.querySelectorAll(
+        '#scavenge_mass_screen .mass-scavenge-table tr[id^="scavenge_village_"]'
+      );
+      rows.forEach(row => {
+        const villageId =
+          row.getAttribute('data-id') ||
+          row.id.replace('scavenge_village_', '');
+        buildVillageUnitUI(row, String(villageId), cfg.unitDefs);
+      });
+    }
+
     // --- Events --------------------------------------------------------------
 
-    // Fill-All: nur aktivierte Units füllen
+    function collectEnabledUnitsForFillAll() {
+      const st = loadSettings();
+
+      // wenn legacy enabledUnits konfiguriert → nutze diese
+      if (Array.isArray(st.enabledUnits) && st.enabledUnits.length) {
+        return [...st.enabledUnits];
+      }
+
+      const units = new Set();
+      document
+        .querySelectorAll('.ds-mass-village-units input.villageUnitToggle:checked')
+        .forEach(cb => {
+          const u = cb.dataset.unit;
+          if (u) units.add(u);
+        });
+
+      const cfgLocal = parseMassConfig();
+      if (!units.size && cfgLocal && cfgLocal.unitDefs) {
+        return Object.keys(cfgLocal.unitDefs);
+      }
+
+      return Array.from(units);
+    }
+
+    // Fill-All: nutzt die aktuell aktivierten Units (DOM)
     $grid.on('click', 'a.fill-all', function (e) {
       e.preventDefault();
-      const enabledUnits = collectEnabledUnits();
+      const enabledUnits = collectEnabledUnitsForFillAll();
       enabledUnits.forEach(unit => {
         const $allLink =
           $inputRow.find(`a.units-entry-all[data-unit="${unit}"]`).first();
@@ -251,162 +472,310 @@
       runMassSequence();
     });
 
-    // Defaults speichern
+    // Defaults speichern (Units + Max pro Dorf)
     jQuery(document).on('click', '.ds-mass-save', function (e) {
       e.preventDefault();
-      const enabled = collectEnabledUnits();
-      const st = { enabledUnits: enabled.length ? enabled : null };
+      const st = loadSettings();
+      const perVillage = {};
+
+      document
+        .querySelectorAll('.ds-mass-village-units input.villageUnitToggle')
+        .forEach(cb => {
+          const vId = cb.dataset.village;
+          const unit = cb.dataset.unit;
+          if (!vId || !unit) return;
+
+          const cell = cb.closest('td');
+          const maxInput = cell ? cell.querySelector('.villageUnitMax') : null;
+
+          if (!perVillage[vId]) {
+            perVillage[vId] = { units: [], max: {} };
+          }
+
+          if (cb.checked && !perVillage[vId].units.includes(unit)) {
+            perVillage[vId].units.push(unit);
+          }
+
+          if (maxInput) {
+            const val = parseInt(maxInput.value, 10);
+            if (Number.isFinite(val) && val > 0) {
+              perVillage[vId].max[unit] = val;
+            }
+          }
+        });
+
+      st.perVillage = perVillage;
+      st.enabledUnits = null; // wir arbeiten ab jetzt pro Dorf
+
       saveSettings(st);
-      console.log('[DSMassScavenger] Defaults gespeichert:', st);
+      console.log('[DSMassScavenger] Defaults pro Dorf gespeichert:', st);
     });
 
-    // Defaults löschen → alle Units aktiv
+    // Defaults löschen → alle Units aktiv + Max-Werte löschen
     jQuery(document).on('click', '.ds-mass-clear', function (e) {
       e.preventDefault();
       localStorage.removeItem(LS_KEY_SETTINGS);
-      jQuery('#scavenge_mass_screen .candidate-squad-widget input.checkboxTroops[unit]')
-        .prop('checked', true);
-      console.log('[DSMassScavenger] Defaults gelöscht, alle Units aktiviert.');
+
+      document
+        .querySelectorAll('.ds-mass-village-units input.villageUnitToggle')
+        .forEach(cb => { cb.checked = true; });
+
+      document
+        .querySelectorAll('.ds-mass-village-units input.villageUnitMax')
+        .forEach(inp => { inp.value = ''; });
+
+      console.log('[DSMassScavenger] Defaults gelöscht, alle Units in allen Dörfern aktiviert & Max-Werte zurückgesetzt.');
+    });
+
+    // Änderungen an Dorf-Checkboxen direkt speichern
+    document.addEventListener('change', ev => {
+      const target = ev.target;
+      if (!target.classList || !target.classList.contains('villageUnitToggle')) return;
+
+      const vId = target.dataset.village;
+      const unit = target.dataset.unit;
+      if (!vId || !unit) return;
+
+      const st = loadSettings();
+      st.perVillage ||= {};
+      let raw = st.perVillage[vId];
+
+      if (!raw) {
+        raw = { units: [], max: {} };
+      } else if (Array.isArray(raw)) {
+        raw = { units: raw.slice(), max: {} };
+      } else if (typeof raw === 'object') {
+        if (!Array.isArray(raw.units)) raw.units = [];
+        if (!raw.max || typeof raw.max !== 'object') raw.max = {};
+      }
+
+      if (target.checked) {
+        if (!raw.units.includes(unit)) raw.units.push(unit);
+      } else {
+        raw.units = raw.units.filter(u => u !== unit);
+      }
+
+      st.perVillage[vId] = raw;
+      saveSettings(st);
+    });
+
+    // Änderungen an Max-Inputs direkt speichern
+    document.addEventListener('input', ev => {
+      const target = ev.target;
+      if (!target.classList || !target.classList.contains('villageUnitMax')) return;
+
+      const vId = target.dataset.village;
+      const unit = target.dataset.unit;
+      if (!vId || !unit) return;
+
+      const st = loadSettings();
+      st.perVillage ||= {};
+      let raw = st.perVillage[vId];
+
+      if (!raw) {
+        raw = { units: [], max: {} };
+      } else if (Array.isArray(raw)) {
+        raw = { units: raw.slice(), max: {} };
+      } else if (typeof raw === 'object') {
+        if (!Array.isArray(raw.units)) raw.units = [];
+        if (!raw.max || typeof raw.max !== 'object') raw.max = {};
+      }
+
+      const val = parseInt(target.value, 10);
+      if (Number.isFinite(val) && val > 0) {
+        raw.max[unit] = val;
+      } else {
+        delete raw.max[unit];
+      }
+
+      st.perVillage[vId] = raw;
+      saveSettings(st);
     });
 
     $grid.data('ds-mass-ui-ready', true);
   }
 
-  function collectEnabledUnits() {
-    const units = [];
-    jQuery('#scavenge_mass_screen .candidate-squad-widget input.checkboxTroops[unit]').each(function () {
-      const $cb = jQuery(this);
-      if ($cb.is(':checked')) {
-        const unit = $cb.attr('unit');
-        if (unit) units.push(unit);
+  // ---------------------------------------------------------------------------
+  // Helpers für aktivierte Units
+  // ---------------------------------------------------------------------------
+
+  function collectEnabledUnitsForVillage(villageId) {
+    const cfg = parseMassConfig();
+    if (!cfg || !cfg.unitDefs) return [];
+
+    const allUnits = Object.keys(cfg.unitDefs);
+    const vCfg = getVillageConfig(villageId);
+
+    let result = vCfg.units;
+
+    if (!Array.isArray(result) || !result.length) {
+      const st = loadSettings();
+      if (Array.isArray(st.enabledUnits) && st.enabledUnits.length) {
+        result = st.enabledUnits.slice();
+      } else {
+        result = allUnits;
       }
-    });
-    return units;
+    }
+
+    return result.filter(u => allUnits.includes(u));
+  }
+
+  function getMaxConfigForVillage(villageId) {
+    const vCfg = getVillageConfig(villageId);
+    return vCfg.max || {};
   }
 
   // ---------------------------------------------------------------------------
-  // Kernlogik: freie Slots finden → Units (home / #freieSlots) → Inputs füllen → Slot selektieren
+  // Kernlogik: freie Slots finden → Units → Inputs füllen → Slot selektieren
   // ---------------------------------------------------------------------------
-function findAllInactiveCells() {
-  console.group('[DSMassScavenger][DEBUG] findAllInactiveCells()');
 
-  const cells = [];
-  const rows = document.querySelectorAll(
-    '#scavenge_mass_screen .mass-scavenge-table tr[id^="scavenge_village_"]'
-  );
+  function findAllInactiveCells() {
+    console.group('[DSMassScavenger][DEBUG] findAllInactiveCells()');
 
-  rows.forEach(row => {
-    const villageId = row.getAttribute('data-id') || row.id.replace('scavenge_village_', '');
-    const optCells = row.querySelectorAll('td.option[data-id]');
+    const cells = [];
+    const rows = document.querySelectorAll(
+      '#scavenge_mass_screen .mass-scavenge-table tr[id^="scavenge_village_"]'
+    );
 
-    console.log(`\n▶ Dorf ${villageId}: Prüfe ${optCells.length} Slots`);
+    rows.forEach(row => {
+      const villageId = row.getAttribute('data-id') || row.id.replace('scavenge_village_', '');
+      const optCells = row.querySelectorAll('td.option[data-id]');
 
-    optCells.forEach(cell => {
-      const optId = parseInt(cell.getAttribute('data-id'), 10);
-      if (!Number.isFinite(optId)) return;
+      console.log(`\n▶ Dorf ${villageId}: Prüfe ${optCells.length} Slots`);
 
-      const inactive = cell.classList.contains('option-inactive');
-      const locked   = cell.classList.contains('option-locked');
+      optCells.forEach(cell => {
+        const optId = parseInt(cell.getAttribute('data-id'), 10);
+        if (!Number.isFinite(optId)) return;
 
-      console.log(
-        `  Slot ${optId}: inactive=${inactive}, locked=${locked}, classes="${cell.className}"`
-      );
+        const inactive = cell.classList.contains('option-inactive');
+        const locked   = cell.classList.contains('option-locked');
 
-      if (!inactive) {
-        console.log("    ✘ ausgeschlossen → nicht inactive");
-        return;
-      }
-      if (locked) {
-        console.log("    ✘ ausgeschlossen → locked");
-        return;
-      }
+        console.log(
+          `  Slot ${optId}: inactive=${inactive}, locked=${locked}, classes="${cell.className}"`
+        );
 
-      console.log("    ✔ akzeptiert → freier Slot");
+        if (!inactive) {
+          console.log('    ✘ ausgeschlossen → nicht inactive');
+          return;
+        }
+        if (locked) {
+          console.log('    ✘ ausgeschlossen → locked');
+          return;
+        }
 
-      cells.push({
-        row,
-        cell,
-        villageId: String(villageId),
-        optionId: optId
+        console.log('    ✔ akzeptiert → freier Slot');
+
+        cells.push({
+          row,
+          cell,
+          villageId: String(villageId),
+          optionId: optId
+        });
       });
     });
-  });
 
-  console.log(`\nErgebnis → ${cells.length} echte freie Slots`);
-  cells.forEach(c => console.log(`  ✔ Dorf ${c.villageId}, Slot ${c.optionId}`));
-  console.groupEnd();
+    console.log(`\nErgebnis → ${cells.length} echte freie Slots`);
+    cells.forEach(c => console.log(`  ✔ Dorf ${c.villageId}, Slot ${c.optionId}`));
+    console.groupEnd();
 
-  return cells;
-}
-
-
-  // virtueller Rest-Pool pro Dorf, damit die Truppen fair auf alle freien Slots verteilt werden
-const villagePools = new Map(); // key: village_id (string) -> { unit: remainingCount }
-
-function getVillagePool(village, enabledUnits) {
-  const key = String(village.village_id);
-  let pool = villagePools.get(key);
-
-  if (!pool) {
-    pool = {};
-    enabledUnits.forEach(unit => {
-      const home = (village.unit_counts_home && village.unit_counts_home[unit]) || 0;
-      pool[unit] = home;
-    });
-    villagePools.set(key, pool);
+    return cells;
   }
 
-  return pool;
-}
+  const villagePools = new Map(); // key: village_id (string) -> { unit: remainingCount }
 
-function fillTemplateForVillage(village, enabledUnits, freeSlotsForVillage) {
-  const inputs = jQuery('#scavenge_mass_screen .candidate-squad-widget input.unitsInput[name]');
-  if (!inputs.length) return false;
+  function getVillagePool(village, enabledUnits, maxCfg) {
+    const key = String(village.village_id);
+    let pool = villagePools.get(key);
 
-  const pool = getVillagePool(village, enabledUnits);
-  const div = freeSlotsForVillage > 0 ? freeSlotsForVillage : 1;
-
-  const perUnit = {};
-  enabledUnits.forEach(unit => {
-    const remaining = pool[unit] || 0;
-    // fairer Split: verteile den verbleibenden Pool auf die noch freien Slots
-    const amount = Math.floor(remaining / div);
-    perUnit[unit] = amount;
-  });
-
-  console.log('[DSMassScavenger] perUnit (pool / freieSlots) für Dorf', village.village_id, {
-    freeSlotsForVillage,
-    pool: { ...pool },
-    perUnit
-  });
-
-  let total = 0;
-
-  inputs.each(function () {
-    const $inp = jQuery(this);
-    const unit = $inp.attr('name');
-    if (!unit) return;
-    const val = perUnit[unit] || 0;
-    total += val;
-    if (val > 0) {
-      $inp.val(String(val));
-    } else {
-      $inp.val('');
+    if (!pool) {
+      pool = {};
+      enabledUnits.forEach(unit => {
+        const home = (village.unit_counts_home && village.unit_counts_home[unit]) || 0;
+        const maxVal = maxCfg && typeof maxCfg[unit] === 'number' && maxCfg[unit] > 0
+          ? maxCfg[unit]
+          : null;
+        const cap = maxVal != null ? Math.min(home, maxVal) : home;
+        pool[unit] = cap;
+      });
+      villagePools.set(key, pool);
     }
-    $inp.trigger('input').trigger('keyup').trigger('change');
-  });
 
-  // jetzt den Pool tatsächlich reduzieren, damit nächste Slots weniger bekommen
-  enabledUnits.forEach(unit => {
-    const used = perUnit[unit] || 0;
-    if (used > 0) {
-      pool[unit] = Math.max(0, (pool[unit] || 0) - used);
-    }
-  });
+    return pool;
+  }
 
-  return total > 0;
-}
+  function fillTemplateForVillage(village, enabledUnits, freeSlotsForVillage, totalSlotsForVillage, villageId) {
+    const inputs = jQuery('#scavenge_mass_screen .candidate-squad-widget').not('.ds-mass-config')
+      .find('input.unitsInput[name]');
+    if (!inputs.length) return false;
+    if (!enabledUnits || !enabledUnits.length) return false;
 
+    const maxCfg = getMaxConfigForVillage(villageId);
+    const pool = getVillagePool(village, enabledUnits, maxCfg);
+
+    const divFree = freeSlotsForVillage > 0 ? freeSlotsForVillage : 1;
+    const slotCount = totalSlotsForVillage > 0 ? totalSlotsForVillage : 1;
+
+    const perUnit = {};
+    enabledUnits.forEach(unit => {
+      const remaining = pool[unit] || 0;
+      const maxVal = maxCfg && typeof maxCfg[unit] === 'number' && maxCfg[unit] > 0
+        ? maxCfg[unit]
+        : null;
+
+      let amount = 0;
+
+      if (maxVal != null) {
+        const perSlotFromMax = Math.floor(maxVal / slotCount);
+        const fairByPool = Math.floor(remaining / divFree);
+        amount = Math.min(perSlotFromMax, fairByPool);
+      } else {
+        amount = Math.floor(remaining / divFree);
+      }
+
+      if (!Number.isFinite(amount) || amount < 0) amount = 0;
+      perUnit[unit] = amount;
+    });
+
+    console.log('[DSMassScavenger] perUnit (Pool/Slots/Max) für Dorf', village.village_id, {
+      freeSlotsForVillage,
+      totalSlotsForVillage: slotCount,
+      pool: { ...pool },
+      maxCfg: { ...maxCfg },
+      perUnit
+    });
+
+    let total = 0;
+
+    inputs.each(function () {
+      const $inp = jQuery(this);
+      const unit = $inp.attr('name');
+      if (!unit) return;
+
+      if (!enabledUnits.includes(unit)) {
+        $inp.val('');
+        $inp.trigger('input').trigger('keyup').trigger('change');
+        return;
+      }
+
+      const val = perUnit[unit] || 0;
+      total += val;
+      if (val > 0) {
+        $inp.val(String(val));
+      } else {
+        $inp.val('');
+      }
+      $inp.trigger('input').trigger('keyup').trigger('change');
+    });
+
+    enabledUnits.forEach(unit => {
+      const used = perUnit[unit] || 0;
+      if (used > 0) {
+        pool[unit] = Math.max(0, (pool[unit] || 0) - used);
+      }
+    });
+
+    return total > 0;
+  }
 
   function clearAllSelections() {
     const $tbl = jQuery('#scavenge_mass_screen .mass-scavenge-table');
@@ -440,59 +809,81 @@ function fillTemplateForVillage(village, enabledUnits, freeSlotsForVillage) {
       return -1;
     }
 
-    const enabledUnits = collectEnabledUnits();
-    if (!enabledUnits.length) {
-      console.warn('[DSMassScavenger] keine Units aktiviert → Abbruch');
-      return -1;
-    }
-
     const inactiveCells = findAllInactiveCells();
     if (!inactiveCells.length) {
       console.log('[DSMassScavenger] keine option-inactive Zellen gefunden');
       return -1;
     }
 
-    const target = inactiveCells[0];
-    const village = villageById.get(String(target.villageId));
-    if (!village) {
-      console.warn('[DSMassScavenger] Dorf nicht in JSON gefunden:', target.villageId);
-      return -1;
+    for (const target of inactiveCells) {
+      const village = villageById.get(String(target.villageId));
+      if (!village) {
+        console.warn('[DSMassScavenger] Dorf nicht in JSON gefunden:', target.villageId);
+        continue;
+      }
+
+      const enabledUnits = collectEnabledUnitsForVillage(target.villageId);
+      if (!enabledUnits.length) {
+        console.log(
+          '[DSMassScavenger] Dorf',
+          target.villageId,
+          'hat keine aktivierten Units → Slot wird übersprungen.'
+        );
+        continue;
+      }
+
+      const totalSlotsForVillage =
+        target.row.querySelectorAll('td.option[data-id]').length || 1;
+
+      const freeForVillage = inactiveCells.filter(
+        c => c.villageId === target.villageId
+      ).length || 1;
+
+      console.log(
+        '[DSMassScavenger] Nutze Dorf',
+        village.village_id,
+        `"${village.village_name}"`,
+        'für Slot',
+        target.optionId,
+        '– freie Slots in diesem Dorf:',
+        freeForVillage,
+        '– Gesamt-Slots in diesem Dorf:',
+        totalSlotsForVillage
+      );
+
+      const hasUnits = fillTemplateForVillage(
+        village,
+        enabledUnits,
+        freeForVillage,
+        totalSlotsForVillage,
+        target.villageId
+      );
+
+      if (!hasUnits) {
+        console.log(
+          '[DSMassScavenger] keine sendbaren Units für Dorf',
+          village.village_id,
+          '→ Slot wird übersprungen.'
+        );
+        continue;
+      }
+
+      clearAllSelections();
+
+      const ok = selectCell(target);
+      if (!ok) {
+        console.warn('[DSMassScavenger] konnte Slot nicht selektieren → Slot wird übersprungen.');
+        continue;
+      }
+
+      const $btn = jQuery('#scavenge_mass_screen .buttons-container .btn-send');
+      if ($btn.length) $btn.removeAttr('disabled');
+
+      return 0;
     }
 
-// Anzahl freier Slots in DIESEM Dorf als Divisor
-const freeForVillage = inactiveCells.filter(
-  c => c.villageId === target.villageId
-).length || 1;
-
-console.log(
-  '[DSMassScavenger] Nutze Dorf',
-  village.village_id,
-  `"${village.village_name}"`,
-  'für Slot',
-  target.optionId,
-  '– freie Slots in diesem Dorf:',
-  freeForVillage
-);
-
-const hasUnits = fillTemplateForVillage(village, enabledUnits, freeForVillage);
-
-    if (!hasUnits) {
-      console.log('[DSMassScavenger] keine sendbaren Units → Abbruch');
-      return -1;
-    }
-
-    clearAllSelections();
-
-    const ok = selectCell(target);
-    if (!ok) {
-      console.warn('[DSMassScavenger] konnte Slot nicht selektieren → Abbruch');
-      return -1;
-    }
-
-    const $btn = jQuery('#scavenge_mass_screen .buttons-container .btn-send');
-    if ($btn.length) $btn.removeAttr('disabled');
-
-    return 0;
+    console.log('[DSMassScavenger] kein geeigneter Slot mit aktivierten Units gefunden.');
+    return -1;
   }
 
   // ---------------------------------------------------------------------------
@@ -502,9 +893,7 @@ const hasUnits = fillTemplateForVillage(village, enabledUnits, freeForVillage);
   let MASS_RUN_ACTIVE = false;
   let MASS_ITER = 0;
   const MASS_ITER_LIMIT = 50;
-  const MASS_DELAY_MS = 900;
   const MASS_STEP_DELAY_MS = 1500; // 1.5s Pause zwischen zwei Mass-Sends
-
 
   function runMassSequence() {
     if (!MASS_RUN_ACTIVE) {
@@ -545,9 +934,7 @@ const hasUnits = fillTemplateForVillage(village, enabledUnits, freeForVillage);
 
     console.groupEnd();
 
-    // kleine Pause, damit DS Slot/DOM aktualisieren kann und der Server etwas "Luft" hat
-setTimeout(() => runMassSequence(iter + 1), MASS_STEP_DELAY_MS);
-
+    setTimeout(() => runMassSequence(), MASS_STEP_DELAY_MS);
   }
 
   // ---------------------------------------------------------------------------
