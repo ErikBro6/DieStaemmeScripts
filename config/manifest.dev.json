@@ -13,7 +13,8 @@
       { "url": "modules/scavenger.auto.js", "id": "autoScavenge", "title": "Raubzug-Automatisierung", "desc": "Automatisches Scavenging / Raubzüge."},
       { "url": "modules/massScavenger.calc.js", "id": "calcMassScavenge", "title": "Massen-Raubzug-Rechner", "desc": "Berechner für Raubzug-Optimierung." },
       { "url": "modules/massScavenger.auto.js", "id": "autoMassScavenge", "title": "Massen-Raubzug-Automatisierung", "desc": "Automatisches Scavenging / Raubzüge."},
-      { "url": "modules/babaFarmer.js", "id": "babaFarmer", "title": "Barbarendorf-Farmer", "desc": "Automatisches Farmen von Barbarendörfern."}
+      { "url": "modules/babaFarmer.js", "id": "babaFarmer", "title": "Barbarendorf-Farmer", "desc": "Automatisches Farmen von Barbarendörfern."},
+      { "url": "modules/massSupportFilter.js", "id": "massSupportFilter", "title": "Filter für Massensupport", "desc": "In der Massensupport-Übersicht werden einige FIlter hinzugefügt."}
     ],
     "train": [
       { "url": "modules/autoRecruit.js", "id": "autoRecruit", "title": "Rekrutierungs-Automatisierung", "desc": "Automatisches Rekrutieren von Einheiten über Massen-Rekrutierung." }
