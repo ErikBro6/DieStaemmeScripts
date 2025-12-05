@@ -2,6 +2,14 @@
   "baseUrl": "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master",
   "assetsBase": "https://cdn.jsdelivr.net/gh/ErikBro6/DieStaemmeScripts@master",
   "routes": {
+    "global": [
+      { 
+        "url": "modules/incReminder.js",
+        "id": "incReminder",
+        "title": "Inc-Reminder",
+        "desc": "Sendet Discord-Nachricht bei neuen Angriffen."
+      }
+    ],
     "place": [
       { "url": "config/assetsBase.js", "id": "assetsBase", "title": "Assets-Basis", "desc": "Grund-Styles & Assets für DS-Tools." },
       { "url": "ui/toggleButton.js", "id": "toggleButton", "title": "Toggle-Button", "desc": "Schalter zum schnellen Ein-/Ausschalten von Modulen." },

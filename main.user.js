@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SpeckMichs Die Stämme Tool Collection
 // @namespace    https://github.com/ErikBro6
-// @version      3.2.0
+// @version      3.2.
 // @description  Erweitert die Die Stämme Erfahrung mit einigen Tools und Skripten
 // @author       SpeckMich
 // @connect      raw.githubusercontent.com
@@ -258,7 +258,18 @@ window.DSGuards = (() => {
    *  Preferences (per module id, fallback to url)
    *  --------------------------------------*/
   const PREFS_KEY = "dsToolsModulePrefsV2"; // { [id:string]: boolean } ; true/undefined = enabled, false = disabled
+  const USER_SETTINGS_KEY = "dsToolsUserSettings"; // freie Settings
   const LEGACY_PREFS_KEY = "dsToolsModulePrefs"; // old url-based
+
+  async function loadUserSettings() {
+  return await GM.getValue(USER_SETTINGS_KEY, {});
+}
+
+async function saveUserSettings(obj) {
+  await GM.setValue(USER_SETTINGS_KEY, obj || {});
+}
+
+window.DS_USER_SETTINGS = {}; // wird nach bootstrap() gefüllt
 
   async function loadPrefs() {
     // migrate once from legacy URL-based => id-based (best-effort)
@@ -392,50 +403,78 @@ function injectTopbarLink() {
     return { url, host: url.hostname, path: url.pathname, screen, mode };
   }
 
-      async function resolveModuleUrls(ctx) {
-    const MODULES = window.modules || {};
-    const flat = flattenModules(MODULES);
+async function resolveModuleUrls(ctx) {
+  const MODULES = window.modules || {};
+  const flat = flattenModules(MODULES);
 
-    // DS-Tools settings page: load nothing
-    if (isDsToolsSettingsScreen(ctx)) return [];
+  // DS-Tools Settings Screen → keine Module laden
+  if (isDsToolsSettingsScreen(ctx)) return [];
 
-async function filterAndExtract(screen, list){
-  const normalized = toArray(list).map(normalizeModuleEntry).filter(Boolean);
-  const keep = [];
-  for (const entry of normalized) {
-    if (await isEnabledByPrefsEntry(entry)) keep.push(entry.url);
+  async function filterAndExtract(screen, list) {
+    const normalized = toArray(list).map(normalizeModuleEntry).filter(Boolean);
+    const keep = [];
+    for (const entry of normalized) {
+      if (await isEnabledByPrefsEntry(entry)) keep.push(entry.url);
+    }
+    return keep;
   }
-  return keep;
+
+  async function getGlobalUrls() {
+    return filterAndExtract("global", MODULES.global || []);
+  }
+
+  // 1) DS-Ultimate planner edit page
+  if (
+    ctx.host.endsWith("ds-ultimate.de") &&
+    /^\/tools\/attackPlanner\/\d+\/edit\/[A-Za-z0-9_-]+/.test(ctx.path)
+  ) {
+    return [
+      ...(await filterAndExtract("attackPlannerEdit", MODULES.attackPlannerEdit)),
+      ...(await getGlobalUrls())
+    ];
+  }
+
+  // 2) Market
+  if (ctx.screen === "market" && MODULES.market) {
+    const key = ctx.mode && MODULES.market[ctx.mode] ? ctx.mode : "default";
+    return [
+      ...(await filterAndExtract("market", toArray(MODULES.market[key]))),
+      ...(await getGlobalUrls())
+    ];
+  }
+
+  // 3) Place
+  if (ctx.screen === "place") {
+    const urls = toArray(MODULES.place);
+    const scoped =
+      ctx.mode !== "call"
+        ? urls.filter((u) => {
+            const s = typeof u === "string" ? u : u?.url;
+            return !/\/massSupporter\.js(\?|$)/.test(s || "");
+          })
+        : urls;
+
+    return [
+      ...(await filterAndExtract("place", scoped)),
+      ...(await getGlobalUrls())
+    ];
+  }
+
+  // 4) Main
+  if (ctx.screen === "main") {
+    return [
+      ...(await filterAndExtract("main", MODULES.main)),
+      ...(await getGlobalUrls())
+    ];
+  }
+
+  // 5) Fallback (alle anderen Screens: info_player, report, snob, overview_villages, map, etc.)
+  return [
+    ...(await filterAndExtract(ctx.screen, MODULES[ctx.screen])),
+    ...(await getGlobalUrls())
+  ];
 }
 
-    if (ctx.host.endsWith("ds-ultimate.de") &&
-        /^\/tools\/attackPlanner\/\d+\/edit\/[A-Za-z0-9_-]+/.test(ctx.path)) {
-      return filterAndExtract("attackPlannerEdit", MODULES.attackPlannerEdit);
-    }
-
-    if (ctx.screen === "market" && MODULES.market) {
-      const key = ctx.mode && MODULES.market[ctx.mode] ? ctx.mode : "default";
-      return filterAndExtract("market", toArray(MODULES.market[key]));
-    }
-
-    if (ctx.screen === "place") {
-      const urls = toArray(MODULES.place);
-const scoped = (ctx.mode !== "call")
-  ? urls.filter(u => {
-      const s = (typeof u === "string") ? u : u?.url;
-      return !/\/massSupporter\.js(\?|$)/.test(s || "");
-    })
-  : urls;
-
-      return filterAndExtract("place", scoped);
-    }
-
-    if (ctx.screen === "main") {
-      return filterAndExtract("main", MODULES.main);
-    }
-
-    return filterAndExtract(ctx.screen, MODULES[ctx.screen]);
-  }
 
 
 
@@ -676,6 +715,8 @@ async function bootstrap() {
 
   // Always add the topbar entry
   injectTopbarLink();
+  window.DS_USER_SETTINGS = await loadUserSettings();
+
 
   // Route: if DS-Tools screen, render and stop
   const ctx = getContext();
@@ -713,6 +754,23 @@ function reloadWithCacheBust(param = "_ds_cb") {
     const wrap = document.createElement("div");
     wrap.innerHTML = `
       <h2 class="vis" style="padding:8px 10px;margin-bottom:8px;">DS-Tools — Module verwalten</h2>
+      <div class="vis" style="margin-bottom:15px;padding:10px;">
+    <h3 style="margin-top:0;margin-bottom:8px;">Benutzer-Einstellungen</h3>
+
+    <table class="vis" width="100%">
+        <tr>
+            <td style="width:220px;font-weight:bold;">Inc DC Webhook URL:</td>
+            <td>
+                <input id="ds-setting-incWebhookURL"
+                       type="text"
+                       class="vis input"
+                       style="width:100%;"
+                       value="${window.DS_USER_SETTINGS.incWebhookURL || ''}">
+            </td>
+        </tr>
+    </table>
+</div>
+
       <table class="vis" width="100%" id="ds-tools-table">
         <tbody id="ds-tools-rows"></tbody>
       </table>
@@ -780,14 +838,24 @@ function reloadWithCacheBust(param = "_ds_cb") {
     }
 
     const status = wrap.querySelector("#ds-tools-status");
-wrap.querySelector("#ds-tools-save").addEventListener("click", async (e) => {
-  e.preventDefault();
-  const next = collectPrefsFromUI();
-  await savePrefs(next);
-  const status = wrap.querySelector("#ds-tools-status");
-  if (status) status.textContent = "Gespeichert. Lade Seite neu …";
-  reloadWithCacheBust(); // uses _ds_cb, preserves game's `t`
-});
+    wrap.querySelector("#ds-tools-save").addEventListener("click", async (e) => {
+        e.preventDefault();
+        
+        const next = collectPrefsFromUI();
+
+        const nextUserSettings = {
+            ...window.DS_USER_SETTINGS,
+            incWebhookURL: document.getElementById("ds-setting-incWebhookURL").value.trim()
+        };
+        await saveUserSettings(nextUserSettings);
+        window.DS_USER_SETTINGS = nextUserSettings;
+
+        await savePrefs(next);
+        status.textContent = "Gespeichert. Lade Seite neu …";
+
+        reloadWithCacheBust();
+    });
+
 
     wrap.querySelector("#ds-tools-enable-all").addEventListener("click", () => {
       tbody.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = true);
