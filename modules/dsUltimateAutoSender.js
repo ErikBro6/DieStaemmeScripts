@@ -1,84 +1,83 @@
-// modules/dsUltimateAutoSender.js
+// ==UserScript Module==
+// DS Ultimate Auto-Sender – Baba-Farmer Style UI
+
 (function () {
   'use strict';
 
-  // --- ON/OFF-Toggle --------------------------------------------------------
-  const STORAGE_KEY = 'dsu_auto_sender_enabled';
-  const TOGGLE_ID   = 'dsu-auto-sender-toggle';
+  // -------------------------------------------------------------
+  // STORAGE
+  // -------------------------------------------------------------
+  const STORAGE_KEY_ENABLED = "dsu_auto_sender_enabled";
+  const STORAGE_KEY_TRIGGER = "dsu_auto_sender_trigger";
 
-  let autoEnabled = true;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw === 'false') autoEnabled = false;
-  } catch (e) { /* ignore */ }
+  let autoEnabled = JSON.parse(localStorage.getItem(STORAGE_KEY_ENABLED)) ?? true;
+  let triggerSec  = parseInt(localStorage.getItem(STORAGE_KEY_TRIGGER)) || 10;
+  triggerSec = Math.max(1, Math.min(20, triggerSec));
 
-  function styleToggle(btn, isOn) {
-    btn.style.position     = 'fixed';
-    btn.style.bottom       = '20px';
-    btn.style.right        = '20px';
-    btn.style.zIndex       = '9999';
-    btn.style.padding      = '6px 10px';
-    btn.style.borderRadius = '6px';
-    btn.style.border       = '0';
-    btn.style.fontSize     = '12px';
-    btn.style.fontWeight   = 'bold';
-    btn.style.cursor       = 'pointer';
-    btn.style.color        = '#fff';
-    btn.style.boxShadow    = '0 2px 8px rgba(0,0,0,.3)';
-    btn.style.background   = isOn ? '#4CAF50' : '#f44336';
-  }
+  // -------------------------------------------------------------
+  // STYLE PANEL (Baba Farmer Style)
+  // -------------------------------------------------------------
+  function createControlPanel() {
+    if (document.getElementById("dsu_auto_sender_panel")) return;
 
-  function updateToggleButton() {
-    const btn = document.getElementById(TOGGLE_ID);
-    if (!btn) return;
-    btn.textContent = autoEnabled ? 'Auto-Sender: ON' : 'Auto-Sender: OFF';
-    btn.style.background = autoEnabled ? '#4CAF50' : '#f44336';
-  }
+    const box = document.createElement("div");
+    box.id = "dsu_auto_sender_panel";
+    box.style.position = "fixed";
+    box.style.top = "150px";
+    box.style.right = "20px";
+    box.style.zIndex = 9999;
+    box.style.backgroundColor = "#f9f9f9";
+    box.style.padding = "10px";
+    box.style.border = "1px solid #ccc";
+    box.style.borderRadius = "8px";
+    box.style.boxShadow = "0 0 5px rgba(0,0,0,0.2)";
+    box.style.fontSize = "14px";
+    box.style.width = "180px";
 
-  function setAutoEnabled(on) {
-    autoEnabled = !!on;
-    try {
-      localStorage.setItem(STORAGE_KEY, autoEnabled ? 'true' : 'false');
-    } catch (e) { /* ignore */ }
-    updateToggleButton();
-  }
+    box.innerHTML = `
+      <div style="font-weight:bold; margin-bottom:6px;">
+        Auto-Sender
+      </div>
 
-  function createToggleButton() {
-    if (document.getElementById(TOGGLE_ID)) return;
-    const btn = document.createElement('button');
-    btn.id = TOGGLE_ID;
-    btn.type = 'button';
-    btn.textContent = autoEnabled ? 'Auto-Sender: ON' : 'Auto-Sender: OFF';
-    styleToggle(btn, autoEnabled);
-    btn.addEventListener('click', () => {
-      setAutoEnabled(!autoEnabled);
+      <label style="font-weight:bold;">Status</label><br>
+      <button id="dsu_toggle_btn"
+        style="margin-top:4px;width:100%;padding:6px;border:none;border-radius:5px;font-weight:bold;cursor:pointer;
+               background:${autoEnabled ? "#4CAF50" : "#f44336"};color:white;">
+        ${autoEnabled ? "ON" : "OFF"}
+      </button>
+
+      <div style="margin-top:10px;font-weight:bold;">
+        Trigger (Sek.)
+      </div>
+      <input id="dsu_trigger_input" type="number"
+        min="1" max="20"
+        value="${triggerSec}"
+        style="width:60px;margin-top:5px;">
+    `;
+
+    document.body.appendChild(box);
+
+    // --- Events ------------------------------------------
+    document.getElementById("dsu_toggle_btn").addEventListener("click", () => {
+      autoEnabled = !autoEnabled;
+      localStorage.setItem(STORAGE_KEY_ENABLED, JSON.stringify(autoEnabled));
+
+      const btn = document.getElementById("dsu_toggle_btn");
+      btn.textContent = autoEnabled ? "ON" : "OFF";
+      btn.style.background = autoEnabled ? "#4CAF50" : "#f44336";
     });
-    document.body.appendChild(btn);
+
+    document.getElementById("dsu_trigger_input").addEventListener("change", e => {
+      triggerSec = Math.max(1, Math.min(20, parseInt(e.target.value) || 10));
+      localStorage.setItem(STORAGE_KEY_TRIGGER, triggerSec.toString());
+    });
   }
 
-  function bootToggle() {
-    if (document.body) {
-      createToggleButton();
-    } else {
-      // Fallback, falls sehr früh geladen
-      const iv = setInterval(() => {
-        if (document.body) {
-          clearInterval(iv);
-          createToggleButton();
-        }
-      }, 100);
-    }
-  }
 
-  if (document.readyState === 'complete' || document.readyState === 'interactive') {
-    bootToggle();
-  } else {
-    window.addEventListener('DOMContentLoaded', bootToggle, { once: true });
-  }
 
-  // --- Bestehende Auto-Sender-Logik ----------------------------------------
-
-  const TRIGGER_SEC = 10;     // Kante: >10 -> ==10
+  // -------------------------------------------------------------
+  // AUTO-SENDER ENGINE
+  // -------------------------------------------------------------
   const SCAN_MS = 200;
   const SAFETY_MS = 0;
 
@@ -87,13 +86,14 @@
   const nowMs = () => Date.now();
 
   function getRows() {
-    return Array.from(document.querySelectorAll('tr[id]'))
-      .filter(tr => tr.querySelector('countdown[date]'));
+    return [...document.querySelectorAll("tr[id]")].filter(tr =>
+      tr.querySelector("countdown[date]")
+    );
   }
 
   function findSendAnchor(tr) {
-    let a = tr.querySelector('a.text-success i.fa-redo');
-    if (a) a = a.closest('a');
+    let a = tr.querySelector("a.text-success i.fa-redo");
+    if (a) a = a.closest("a");
     if (!a) a = tr.querySelector('a[href*="game.php"][href*="screen=place"]');
     return a || null;
   }
@@ -104,72 +104,64 @@
     return x.toString();
   }
 
-  // ---- Tab-Handle-Registry & Close-Signal ----
-  const openedTabs = new Map(); // token -> handle
+  // TAB CLOSE SUPPORT
+  const openedTabs = new Map();
+  if (typeof GM_addValueChangeListener === "function") {
+    GM_addValueChangeListener("auto_close_signal", (name, oldVal, newVal, remote) => {
+      if (!remote || !newVal) return;
 
-  GM.addValueChangeListener('auto_close_signal', (name, oldVal, newVal, remote) => {
-    if (!remote || !newVal) return;
-    const { token, delayMs } = newVal;
-    const handle = openedTabs.get(token);
-    if (handle && typeof handle.close === 'function') {
-      setTimeout(() => {
-        try { handle.close(); } catch {}
-        openedTabs.delete(token);
-      }, delayMs ?? 3000);
-    }
-  });
+      const { token, delayMs } = newVal;
+      const handle = openedTabs.get(token);
+
+      if (handle && typeof handle.close === "function") {
+        setTimeout(() => {
+          try { handle.close(); } catch {}
+          openedTabs.delete(token);
+        }, delayMs ?? 3000);
+      }
+    });
+  }
 
   function openAutoTab(href, token) {
-    // nur im automatischen Pfad auto=1 + autotoken anhängen
-    let url = withParam(href, 'auto', '1');
-    url = withParam(url, 'autotoken', token);
+    let url = withParam(href, "auto", "1");
+    url = withParam(url, "autotoken", token);
 
-    const handle = GM_openInTab
+    const handle = (typeof GM_openInTab === "function")
       ? GM_openInTab(url, { active: true, insert: true, setParent: true })
-      : window.open(url, '_blank', 'noopener,noreferrer');
+      : window.open(url, "_blank", "noopener,noreferrer");
 
-    // nur speichern, wenn wir wirklich ein Handle bekommen haben
     if (handle) openedTabs.set(token, handle);
-    return handle;
   }
 
-  async function triggerSend(tr, rowId) {
-    if (!autoEnabled) return; // hart stoppen, wenn OFF
+
+  function triggerSend(tr, rowId) {
+    if (!autoEnabled) return;
 
     const a = findSendAnchor(tr);
-    if (!a) {
-      console.warn('Kein Send-Link gefunden für Row:', rowId);
-      return;
-    }
-    const href = a.getAttribute('href');
-    if (!href) return;
+    if (!a) return;
 
-    // Doppel-Trigger sofort verhindern
     fired.add(rowId);
 
-    // eindeutiger Token pro Öffnung
     const token = `auto_${rowId}_${Date.now()}`;
+    openAutoTab(a.href, token);
 
-    // neuen Tab öffnen (Auto-Flow → auto=1 & autotoken)
-    openAutoTab(href, token);
-
-    // Feedback
-    tr.style.outline = '2px solid limegreen';
+    tr.style.outline = "2px solid limegreen";
   }
 
-  function checkRow(tr) {
-    if (!autoEnabled) return; // wenn OFF, nichts beobachten
 
-    const rowId = tr.getAttribute('id');
+  function checkRow(tr) {
+    if (!autoEnabled) return;
+
+    const rowId = tr.getAttribute("id");
     if (!rowId || fired.has(rowId)) return;
 
-    const cd = tr.querySelector('countdown[date]');
+    const cd = tr.querySelector("countdown[date]");
     if (!cd) return;
 
-    const ts = Number(cd.getAttribute('date')); // Unix Sekunden
+    const ts = Number(cd.getAttribute("date"));
     if (!Number.isFinite(ts)) return;
 
-    const msLeft = (ts * 1000) - nowMs() - SAFETY_MS;
+    const msLeft = ts * 1000 - nowMs() - SAFETY_MS;
     const secLeft = Math.max(-1, Math.floor(msLeft / 1000));
 
     const prev = lastSeenSec.get(rowId);
@@ -178,24 +170,32 @@
       return;
     }
 
-    // Edge-Trigger: Übergang >TRIGGER_SEC -> ==TRIGGER_SEC
-    if (prev > TRIGGER_SEC && secLeft === TRIGGER_SEC) {
-      triggerSend(tr, rowId); // async not needed
+    if (prev > triggerSec && secLeft === triggerSec) {
+      triggerSend(tr, rowId);
     }
 
     lastSeenSec.set(rowId, secLeft);
   }
 
-  // Poll
+
+  // Poll loop
   setInterval(() => {
     if (!autoEnabled) return;
     getRows().forEach(checkRow);
   }, SCAN_MS);
 
-  // DOM-Änderungen (keine Vorinitialisierung)
-  const mo = new MutationObserver(() => {
-    if (!autoEnabled) return;
-    // Poll findet neue Rows
-  });
-  mo.observe(document.documentElement, { childList: true, subtree: true });
+
+  // -------------------------------------------------------------
+  // INIT
+  // -------------------------------------------------------------
+  function init() {
+    createControlPanel();
+  }
+
+  if (document.readyState === "complete" || document.readyState === "interactive") {
+    init();
+  } else {
+    window.addEventListener("DOMContentLoaded", init);
+  }
+
 })();

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SpeckMichs Die Stämme Tool Collection
 // @namespace    https://github.com/ErikBro6
-// @version      3.2.4
+// @version      3.2.5
 // @description  Erweitert die Die Stämme Erfahrung mit einigen Tools und Skripten
 // @author       SpeckMich
 // @connect      raw.githubusercontent.com
@@ -9,7 +9,7 @@
 // @connect      cdn.jsdelivr.net
 // @match        https://*.die-staemme.de/game.php?*
 // @match        https://*ds-ultimate.de/tools/attackPlanner/*
-// @icon         https://www.google.com/s2/favicons?sz=64&domain=die-staemme.de
+// @icon         https://pbs.twimg.com/profile_images/1456997417807716357/oX-R0v9l_400x400.png
 // @updateURL    https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/main.user.js
 // @downloadURL  https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/main.user.js
 // @grant        GM_xmlhttpRequest
