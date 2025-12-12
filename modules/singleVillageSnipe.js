@@ -1566,70 +1566,39 @@ async function fetchTroopsForCurrentGroup(groupId) {
 
 // Helper: Get landing time from a string that contains "today at" and "tomorrow at"
 function getTimeFromString(timeLand) {
-    let dateLand = '';
-    let serverDate = document.getElementById('serverDate').innerText.split('/');
+    const serverDate = document.getElementById('serverDate').innerText.split('/');
+    const year = serverDate[2];
 
-    let TIME_PATTERNS = {
-        today: 'today at %s',
-        tomorrow: 'tomorrow at %s',
-        later: 'on %1 at %2',
-    };
+    // Zeit extrahieren
+    let time = timeLand.match(/\d{2}:\d{2}:\d{2}/);
+    time = time ? time[0] : "00:00:00";
 
-    if (window.lang) {
-        TIME_PATTERNS = {
-            today: window.lang['aea2b0aa9ae1534226518faaefffdaad'],
-            tomorrow: window.lang['57d28d1b211fddbb7a499ead5bf23079'],
-            later: window.lang['0cb274c906d622fa8ce524bcfbb7552d'],
-        };
+    const txt = timeLand.toLowerCase();
+
+    // TODAY
+    if (txt.includes("today") || txt.includes("heute")) {
+        return `${serverDate[0]}/${serverDate[1]}/${year} ${time}`;
     }
 
-    let todayPattern = new RegExp(
-        TIME_PATTERNS.today.replace('%s', '([\\d+|:]+)')
-    ).exec(timeLand);
-    let tomorrowPattern = new RegExp(
-        TIME_PATTERNS.tomorrow.replace('%s', '([\\d+|:]+)')
-    ).exec(timeLand);
-    let laterDatePattern = new RegExp(
-        TIME_PATTERNS.later
-            .replace('%1', '([\\d+|\\.]+)')
-            .replace('%2', '([\\d+|:]+)')
-    ).exec(timeLand);
-
-    let time =
-        timeLand.match(/\d+:\d+:\d+:\d+/) ?? timeLand.match(/\d+:\d+:\d+/);
-    time = time && time[0];
-
-    if (todayPattern !== null) {
-        // today
-        dateLand =
-            serverDate[0] +
-            '/' +
-            serverDate[1] +
-            '/' +
-            serverDate[2] +
-            ' ' +
-            time;
-    } else if (tomorrowPattern !== null) {
-        // tomorrow
-        let tomorrowDate = new Date(
-            serverDate[1] + '/' + serverDate[0] + '/' + serverDate[2]
-        );
-        tomorrowDate.setDate(tomorrowDate.getDate() + 1);
-        dateLand =
-            ('0' + tomorrowDate.getDate()).slice(-2) +
-            '/' +
-            ('0' + (tomorrowDate.getMonth() + 1)).slice(-2) +
-            '/' +
-            tomorrowDate.getFullYear() +
-            ' ' +
-            time;
-    } else {
-        // on
-        let on = timeLand.match(/\d+.\d+/)[0].split('.');
-        dateLand = on[0] + '/' + on[1] + '/' + serverDate[2] + ' ' + time;
+    // TOMORROW
+    if (txt.includes("tomorrow") || txt.includes("morgen")) {
+        const d = new Date(`${serverDate[2]}-${serverDate[1]}-${serverDate[0]}`);
+        d.setDate(d.getDate() + 1);
+        const dd = String(d.getDate()).padStart(2, "0");
+        const mm = String(d.getMonth() + 1).padStart(2, "0");
+        return `${dd}/${mm}/${year} ${time}`;
     }
 
-    return dateLand;
+    // EXPLICIT DATE: dd.mm. / dd.mm.yyyy
+    let match = timeLand.match(/(\d{1,2})\.(\d{1,2})\.?/);
+    if (match) {
+        const dd = match[1].padStart(2, "0");
+        const mm = match[2].padStart(2, "0");
+        return `${dd}/${mm}/${year} ${time}`;
+    }
+
+    // Fallback
+    return `${serverDate[0]}/${serverDate[1]}/${year} ${time}`;
 }
 
 // Helper: Format as number

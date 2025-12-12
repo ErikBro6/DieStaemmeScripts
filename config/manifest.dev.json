@@ -52,6 +52,7 @@
     "info_player": { "url": "modules/playerInfoTools.js", "id": "playerInfoTools", "title": "Spieler-Info Tools", "desc": "Hilfstools auf Spielerseiten." },
     "info_village": { "url": "modules/singleVillageSnipe.js", "id": "singleVillageSnipe", "title": "Snipe (Einzeldorf)", "desc": "Schnelles Snipen direkt von der Dorfinfoseite." },
     "info_ally": { "url": "modules/tribeStats.js", "id": "tribeStats", "title": "Stammes-Statistiken", "desc": "ODA/ODD/ODS & weitere Kennzahlen." },
+    "report": { "url": "modules/reportInfo.js", "id": "reportInfo", "title": "Berichte Extra Infos", "desc": "Erweiterte Anzeigen im Bericht" },
     "main": [
       { "url": "config/assetsBase.js", "id": "assetsBaseMain", "title": "Assets-Basis (Hauptgebäude)", "desc": "Grund-Styles auf der Hauptgebäude-Seite." },
       { "url": "modules/softBuildQueue.js", "id": "softBuildQueue", "title": "Soft-Bauqueue", "desc": "„Soft“-Aufträge direkt in der echten Queue anzeigen." },
