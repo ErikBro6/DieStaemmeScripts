@@ -341,6 +341,29 @@ if (LAST_UPDATED_TIME !== null) {
 } else {
     fetchUnitInfo();
 }
+// Helper: Get destination village coords (skin-safe)
+function getDestinationVillageCoords() {
+    // Primär: explizite Koordinaten-Zeile
+    const row = jQuery('#content_value')
+        .find('td')
+        .filter(function () {
+            return jQuery(this).text().trim() === 'Koordinaten:';
+        })
+        .next('td')
+        .text()
+        .match(/\d{3}\|\d{3}/);
+
+    if (row) return row[0];
+
+    // Fallback: irgendwo im Village-Infoblock
+    const fallback = jQuery('#content_value')
+        .text()
+        .match(/\b\d{3}\|\d{3}\b/);
+
+    if (fallback) return fallback[0];
+
+    throw new Error('Destination village coordinates not found');
+}
 
 // Initialize Single Village Snipe script
 async function initVillageSnipe(groupId) {
@@ -362,18 +385,8 @@ async function initVillageSnipe(groupId) {
     setTimeout(function () {
         // set the default destination village
         let destinationVillage;
-        if (mobiledevice) {
-            destinationVillage = jQuery('.mobileKeyValue')
-                .eq(0)
-                .find('div')
-                .eq(0)
-                .text()
-                .match(/\d+\|\d+/)[0];
-        } else {
-            destinationVillage = jQuery(
-                '#content_value table table td:eq(2)'
-            ).text();
-        }
+        destinationVillage = getDestinationVillageCoords();
+
 
         if (`${LS_PREFIX}_${destinationVillage}` in localStorage) {
             const savedConfig = JSON.parse(
