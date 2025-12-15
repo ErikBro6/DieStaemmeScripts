@@ -12,6 +12,16 @@
         "compliance": "legal"
       }
     ],
+    "am_farm": [
+      {
+        "url": "modules/farmAssistantAuto.js",
+        "id": "farmAssistantAuto",
+        "title": "Farm-Assistent: Auto Farmer",
+        "desc": "Klickt durch den Farm-Assistent",
+        "defaultEnabled": false,
+        "compliance": "illegal"
+      }
+    ],
     "place": [
       {
         "url": "config/assetsBase.js",
