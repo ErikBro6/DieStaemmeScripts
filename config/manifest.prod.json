@@ -10,6 +10,14 @@
         "desc": "Sendet Discord-Nachricht bei neuen Angriffen. Vorraussetzung ist eine eingetragene Discord-Webhook-URL, siehe ganz oben.",
         "defaultEnabled": false,
         "compliance": "legal"
+      },
+      {
+        "url": "modules/botGuardNotifier.js",
+        "id": "botGuardNotifier",
+        "title": "Bot-Schutz → Discord Benachrichtigung",
+        "desc": "Sendet eine Discord-Nachricht, sobald der Bot-Schutz ausgelöst wird.",
+        "defaultEnabled": true,
+        "compliance": "legal"
       }
     ],
     "am_farm": [
@@ -274,14 +282,24 @@
       "defaultEnabled": true,
       "compliance": "legal"
     },
-    "info_village": {
-      "url": "modules/singleVillageSnipe.js",
-      "id": "singleVillageSnipe",
-      "title": "Dorf-Info: Snipe-Tool",
-      "desc": "Schnelles Snipen direkt von der Dorfinfoseite. Das reguläre Single-Village-Snipe als Button.",
-      "defaultEnabled": true,
-      "compliance": "legal"
-    },
+    "info_village": [
+      {
+        "url": "modules/singleVillageSnipe.js",
+        "id": "singleVillageSnipe",
+        "title": "Dorf-Info: Snipe-Tool",
+        "desc": "Schnelles Snipen direkt von der Dorfinfoseite. Das reguläre Single-Village-Snipe als Button.",
+        "defaultEnabled": true,
+        "compliance": "legal"
+      },
+      {
+        "url": "modules/ressourceSenderSingle.js",
+        "id": "ressourceSenderSingle",
+        "title": "Dorf-Info: Ressourcen senden",
+        "desc": "Ressourcen an ein einzelnes Dorf senden.",
+        "defaultEnabled": true,
+        "compliance": "legal"
+      }
+    ],
     "info_ally": {
       "url": "modules/tribeStats.js",
       "id": "tribeStats",
