@@ -9,56 +9,67 @@
   const table = document.querySelector('#villages_list');
   if (!table) return;
 
-  // Create the button
+  // Button nur einmal anlegen
+  if (document.getElementById('copy-player-coords')) return;
+
   const btn = document.createElement('a');
   btn.href = '#';
+  btn.id = 'copy-player-coords';
   btn.className = 'btn';
   btn.textContent = 'Koordinaten kopieren';
 
-  // Place it right above the table
   table.parentElement.insertBefore(btn, table);
 
-  // Extract and copy coords from the table
-  function extractCoords() {
-    const rows = table.querySelectorAll('tbody > tr');
-    const out = [];
-    rows.forEach(tr => {
-      // “Koordinaten” is the 2nd column in your markup
-      const td = tr.children[1];
-      if (!td) return;
+function extractCoords() {
+  const rows = table.querySelectorAll('tbody > tr');
+  const out = [];
+
+  rows.forEach(tr => {
+    const cells = tr.querySelectorAll('td');
+    cells.forEach(td => {
       const m = td.textContent.match(/\b\d{3}\|\d{3}\b/);
       if (m) out.push(m[0]);
     });
-    return out;
-  }
+  });
+
+  return out;
+}
+
 
   async function copyToClipboard(text) {
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(text);
-      } else {
-        // Fallback for older browsers
-        const ta = document.createElement('textarea');
-        ta.style.position = 'fixed';
-        ta.value = text;
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand('copy');
-        document.body.removeChild(ta);
-      }
-    } catch (e) {
-      (window.UI && UI.ErrorMessage) ? UI.ErrorMessage('Kopieren fehlgeschlagen.') : alert('Kopieren fehlgeschlagen.');
-      console.error('[playerCopyCoords]', e);
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
     }
   }
 
-  btn.addEventListener('click', (ev) => {
+  btn.addEventListener('click', async (ev) => {
     ev.preventDefault();
     const coords = extractCoords();
+
     if (!coords.length) {
-      (window.UI && UI.ErrorMessage) ? UI.ErrorMessage('Keine Koordinaten gefunden.') : alert('Keine Koordinaten gefunden.');
+      UI?.ErrorMessage
+        ? UI.ErrorMessage('Keine Koordinaten gefunden.')
+        : alert('Keine Koordinaten gefunden.');
       return;
     }
-    copyToClipboard(coords.join('\n'));
+
+    await copyToClipboard(coords.join('\n'));
+    UI?.SuccessMessage && UI.SuccessMessage(`${coords.length} Koordinaten kopiert`);
   });
+
+  // 🔁 Beobachtet AJAX-Nachladen der Dörfer
+  const mo = new MutationObserver(() => {
+    if (table.querySelector('tbody > tr')) {
+      mo.disconnect();
+    }
+  });
+
+  mo.observe(table.tBodies[0], { childList: true });
 })();
