@@ -1,6 +1,6 @@
 {
-  "baseUrl": "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master",
-  "assetsBase": "https://cdn.jsdelivr.net/gh/ErikBro6/DieStaemmeScripts@master",
+  "baseUrl": "https://raw.githubusercontent.com/EmoteBot6/DieStaemmeScripts/master",
+  "assetsBase": "https://cdn.jsdelivr.net/gh/EmoteBot6/DieStaemmeScripts@master",
   "routes": {
     "global": [
       {

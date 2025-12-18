@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         DS → Map Popup: Spy Snippet (Resources + Grid Buildings)
-// @namespace    https://github.com/ErikBro6/DieStaemmeScripts
+// @namespace    https://github.com/EmoteBot6/DieStaemmeScripts
 // @version      1.4.0
 // @description  Im Karten-Hover: Späh-Rohstoffe + Gebäude als DS-Icon-Gitter (statt Links/Rechts-Tabellen). Sucht den neuesten Bericht automatisch und cached ihn.
 // @author       SpeckMich

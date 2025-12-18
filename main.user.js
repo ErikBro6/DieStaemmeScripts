@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         SpeckMichs Die Stämme Tool Collection
-// @namespace    https://github.com/ErikBro6
+// @namespace    https://github.com/EmoteBot6
 // @version      3.2.15
 // @description  Erweitert die Die Stämme Erfahrung mit einigen Tools und Skripten
 // @author       SpeckMich
@@ -10,8 +10,8 @@
 // @match        https://*.die-staemme.de/game.php?*
 // @match        https://*ds-ultimate.de/tools/attackPlanner/*
 // @icon         https://pbs.twimg.com/profile_images/1456997417807716357/oX-R0v9l_400x400.png
-// @updateURL    https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/main.user.js
-// @downloadURL  https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/main.user.js
+// @updateURL    https://raw.githubusercontent.com/EmoteBot6/DieStaemmeScripts/master/main.user.js
+// @downloadURL  https://raw.githubusercontent.com/EmoteBot6/DieStaemmeScripts/master/main.user.js
 // @grant        GM_xmlhttpRequest
 // @grant        GM.setValue
 // @grant        GM.getValue
@@ -31,31 +31,31 @@
     cacheBustIntervalSec: 60,
     modules: {
       place: [
-        "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/<commit>/config/assetsBase.js",
-        "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/<commit>/ui/toggleButton.js",
-        "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/<commit>/modules/confirmEnhancer.js",
-        "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/<commit>/modules/autoSender.js",
-        "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/<commit>/modules/massSupporter.js",
+        "https://raw.githubusercontent.com/EmoteBot6/DieStaemmeScripts/<commit>/config/assetsBase.js",
+        "https://raw.githubusercontent.com/EmoteBot6/DieStaemmeScripts/<commit>/ui/toggleButton.js",
+        "https://raw.githubusercontent.com/EmoteBot6/DieStaemmeScripts/<commit>/modules/confirmEnhancer.js",
+        "https://raw.githubusercontent.com/EmoteBot6/DieStaemmeScripts/<commit>/modules/autoSender.js",
+        "https://raw.githubusercontent.com/EmoteBot6/DieStaemmeScripts/<commit>/modules/massSupporter.js",
       ],
       map: [
-        "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/<commit>/config/assetsBase.js",
-        "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/<commit>/ui/toggleButton.js",
-        "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/<commit>/modules/confirmEnhancer.js",
-        "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/<commit>/modules/lineMap.js",
-        "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/<commit>/modules/tooltip.js",
-        "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/<commit>/modules/pickVillages.js",
+        "https://raw.githubusercontent.com/EmoteBot6/DieStaemmeScripts/<commit>/config/assetsBase.js",
+        "https://raw.githubusercontent.com/EmoteBot6/DieStaemmeScripts/<commit>/ui/toggleButton.js",
+        "https://raw.githubusercontent.com/EmoteBot6/DieStaemmeScripts/<commit>/modules/confirmEnhancer.js",
+        "https://raw.githubusercontent.com/EmoteBot6/DieStaemmeScripts/<commit>/modules/lineMap.js",
+        "https://raw.githubusercontent.com/EmoteBot6/DieStaemmeScripts/<commit>/modules/tooltip.js",
+        "https://raw.githubusercontent.com/EmoteBot6/DieStaemmeScripts/<commit>/modules/pickVillages.js",
       ],
       overview_villages:
-        "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/<commit>/modules/overviewCombined.js",
+        "https://raw.githubusercontent.com/EmoteBot6/DieStaemmeScripts/<commit>/modules/overviewCombined.js",
       market: {
         resource_balancer:
-          "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/<commit>/modules/resBalancer.js",
+          "https://raw.githubusercontent.com/EmoteBot6/DieStaemmeScripts/<commit>/modules/resBalancer.js",
         default:
-          "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/<commit>/menu/resBalancerMenuPoint.js",
+          "https://raw.githubusercontent.com/EmoteBot6/DieStaemmeScripts/<commit>/menu/resBalancerMenuPoint.js",
       },
       attackPlannerEdit: [
-        "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/<commit>/modules/dsUltimateTimingSaver.js",
-        "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/<commit>/modules/dsUltimateAutoSender.js",
+        "https://raw.githubusercontent.com/EmoteBot6/DieStaemmeScripts/<commit>/modules/dsUltimateTimingSaver.js",
+        "https://raw.githubusercontent.com/EmoteBot6/DieStaemmeScripts/<commit>/modules/dsUltimateAutoSender.js",
       ],
     },
   };
@@ -280,7 +280,7 @@
   const ENV_KEY = "dsToolsEnv";
   const DEFAULT_ENV = "prod";
   const MANIFEST_URLS = {
-    prod: "https://raw.githubusercontent.com/ErikBro6/DieStaemmeScripts/master/config/manifest.prod.json",
+    prod: "https://raw.githubusercontent.com/EmoteBot6/DieStaemmeScripts/master/config/manifest.prod.json",
     dev: "http://localhost:8123/config/manifest.dev.json",
   };
 
