@@ -26,6 +26,14 @@
         "desc": "Acc Name statt Rangliste & Co",
         "defaultEnabled": true,
         "compliance": "legal"
+      },
+      {
+        "url": "modules/incOrganizer.js",
+        "id": "incOrganizer",
+        "title": "Global: Angriffe umbenennen und farblich markieren",
+        "desc": "Angriffe können über Buttons markiert werden.",
+        "defaultEnabled": true,
+        "compliance": "legal"
       }
     ],
     "am_farm": [
@@ -291,21 +299,22 @@
       "compliance": "legal"
     },
     "info_village": [
-    {
-      "url": "modules/singleVillageSnipe.js",
-      "id": "singleVillageSnipe",
-      "title": "Dorf-Info: Snipe-Tool",
-      "desc": "Schnelles Snipen direkt von der Dorfinfoseite. Das reguläre Single-Village-Snipe als Button.",
-      "defaultEnabled": true,
-      "compliance": "legal"
-    },{
-      "url": "modules/ressourceSenderSingle.js",
-      "id": "ressourceSenderSingle",
-      "title": "Dorf-Info: Ressourcen senden",
-      "desc": "Ressourcen an ein einzelnes Dorf senden.",
-      "defaultEnabled": true,
-      "compliance": "legal"
-    }
+      {
+        "url": "modules/singleVillageSnipe.js",
+        "id": "singleVillageSnipe",
+        "title": "Dorf-Info: Snipe-Tool",
+        "desc": "Schnelles Snipen direkt von der Dorfinfoseite. Das reguläre Single-Village-Snipe als Button.",
+        "defaultEnabled": true,
+        "compliance": "legal"
+      },
+      {
+        "url": "modules/ressourceSenderSingle.js",
+        "id": "ressourceSenderSingle",
+        "title": "Dorf-Info: Ressourcen senden",
+        "desc": "Ressourcen an ein einzelnes Dorf senden.",
+        "defaultEnabled": true,
+        "compliance": "legal"
+      }
     ],
     "info_ally": {
       "url": "modules/tribeStats.js",

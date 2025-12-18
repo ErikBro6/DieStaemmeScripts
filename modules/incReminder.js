@@ -1,167 +1,141 @@
 // ==UserScript==
 // @name         Inc DC Reminder via Webhook (DS-Tools Version)
 // @namespace    http://tampermonkey.net/
-// @version      2.0
+// @version      2.2
 // @description  Sendet Discord-Nachricht bei Inc-Erhöhung. Webhook wird aus DS-Tools Settings gelesen.
 // @author       SpeckMich
 // @match        https://*.die-staemme.de/*
+// @run-at       document-idle
 // ==/UserScript==
 
 (function () {
     'use strict';
 
-    let intervalId = null;
-    let intervalTime = 10000; // 10 Sekunden
-    let lastSentValue = 0;
+    /* =========================
+     * 🔒 SINGLETON
+     * ========================= */
+    if (window.__DS_INC_REMINDER_RUNNING__) return;
+    window.__DS_INC_REMINDER_RUNNING__ = true;
 
-    //
-    // 🔥 Webhook direkt aus DS-Tools Settings
-    //
+    /* =========================
+     * 🔧 CONFIG / STATE
+     * ========================= */
+    const INTERVAL_MS = 10_000;
+    const STORAGE_KEY = 'ds_inc_sent_values'; // <-- WICHTIG
+
+    window.__DS_INC_REMINDER_INTERVAL__ =
+        window.__DS_INC_REMINDER_INTERVAL__ || null;
+
+    let sending = false;
+
+    /* =========================
+     * 💾 SENT VALUE CACHE
+     * ========================= */
+    function getSentValues() {
+        try {
+            return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+        } catch {
+            return [];
+        }
+    }
+
+    function markAsSent(value) {
+        const list = getSentValues();
+        if (!list.includes(value)) {
+            list.push(value);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+        }
+    }
+
+    function wasSent(value) {
+        return getSentValues().includes(value);
+    }
+
+    /* =========================
+     * 🔥 SETTINGS
+     * ========================= */
     function getWebhook() {
         return window?.DS_USER_SETTINGS?.incWebhookURL?.trim() || "";
     }
 
-function getSpielerName() {
-    try {
-        // Profil-Menü → Name steht in der ersten Zeile des Dropdowns
-        const el = document.querySelector(
-            'td.menu-column-item a[href*="screen=info_player"]'
-        );
-        if (el) return el.textContent.trim();
-
-        // Fallback (falls Dropdown nicht gerendert wurde)
-        const el2 = document.querySelector('#topdisplay .menu_column a[href*="info_player"]');
-        if (el2) return el2.textContent.trim();
-
-        return "Unbekannt";
-    } catch (e) {
-        return "Unbekannt";
-    }
-}
-
-function getWorld() {
-    const m = location.hostname.match(/^(.*?)\.die-staemme\.de$/);
-    return m ? m[1] : "Unbekannte Welt";
-}
-
-
-function sendToDiscord(value) {
-    const webhookURL = getWebhook();
-    if (!webhookURL) {
-        console.warn("[IncReminder] Kein Webhook gesetzt.");
-        return;
+    function getSpielerName() {
+        const el =
+            document.querySelector('td.menu-column-item a[href*="screen=info_player"]') ||
+            document.querySelector('#topdisplay a[href*="info_player"]');
+        return el ? el.textContent.trim() : 'Unbekannt';
     }
 
-    const spielerName = getSpielerName();
-    const world = getWorld(); // 🌍 direkt aus URL
-
-    const payload = {
-        content: `🚨 Neuer Inc auf **${spielerName}** (${world}) – Gesamtanzahl: **${value}**`,
-        username: "Incs-Bot",
-        avatar_url: "https://i.imgur.com/4M34hi2.png"
-    };
-
-    fetch(webhookURL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-    }).catch(() => {});
-}
-
-
-//
-// persistent lastSentValue
-//
-function getLast() {
-    return parseInt(localStorage.getItem("ds_inc_last") || "0", 10);
-}
-
-function setLast(v) {
-    localStorage.setItem("ds_inc_last", String(v));
-    lastSentValue = v;
-}
-
-//
-// INC checker — jetzt spamfrei
-//
-function checkValue() {
-    const p = document.getElementById("incomings_amount");
-    if (!p) return;
-
-    const x = parseInt(p.textContent.trim(), 10);
-    if (isNaN(x)) return;
-
-    const last = getLast();
-
-    // ↑ INC steigt → senden
-    if (x > last) {
-        sendToDiscord(x);
-        setLast(x);
+    function getWorld() {
+        const m = location.hostname.match(/^(.*?)\.die-staemme\.de$/);
+        return m ? m[1] : 'Unbekannte Welt';
     }
 
-    // ↓ INC sinkt (Angriff abgeschlossen) → neuen Basiswert setzen
-    else if (x < last) {
-        setLast(x);
-    }
-}
+    /* =========================
+     * 📤 DISCORD (HARD LOCK)
+     * ========================= */
+    function sendToDiscord(value) {
+        if (sending) return;
+        sending = true;
 
-
-    //
-    // 🔥 Intervall starten
-    //
-    function startInterval() {
         const webhookURL = getWebhook();
         if (!webhookURL) {
-            console.warn("[IncReminder] Kein Webhook gesetzt.");
+            sending = false;
             return;
         }
 
-        if (intervalId) clearInterval(intervalId);
-        intervalId = setInterval(checkValue, intervalTime);
+        const payload = {
+            content: `🚨 Neuer Inc auf **${getSpielerName()}** (${getWorld()}) – Gesamtanzahl: **${value}**`,
+            username: 'Incs-Bot',
+            avatar_url: 'https://i.imgur.com/4M34hi2.png'
+        };
 
-        console.log("[IncReminder] Intervall gestartet:", intervalTime / 1000, "Sekunden");
+        fetch(webhookURL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        }).finally(() => {
+            markAsSent(value);
+            setTimeout(() => (sending = false), 500);
+        });
     }
 
-    //
-    // 🔥 Intervall stoppen
-    //
-    function stopInterval() {
-        if (intervalId) {
-            clearInterval(intervalId);
-            intervalId = null;
-            console.log("[IncReminder] Intervall gestoppt.");
-        }
+    /* =========================
+     * 🔍 CHECKER (STABIL)
+     * ========================= */
+    function checkValue() {
+        const el = document.getElementById('incomings_amount');
+        if (!el) return;
+
+        const value = parseInt(el.textContent.trim(), 10);
+        if (isNaN(value) || value <= 0) return;
+
+        // 🔒 NUR EINMAL PRO WERT
+        if (wasSent(value)) return;
+
+        sendToDiscord(value);
     }
 
-    //
-    // 🔥 Intervall ändern
-    //
-    function changeIntervalTime() {
-        const newTimeSec = prompt("Neues Intervall in Sekunden:", intervalTime / 1000);
-        if (newTimeSec !== null) {
-            const parsed = parseInt(newTimeSec, 10);
-            if (!isNaN(parsed) && parsed > 0) {
-                intervalTime = parsed * 1000;
-                if (intervalId) startInterval();
-            }
-        }
-    }
-
-    //
-    // 🔥 Automatisch starten, sobald DS-Tools geladen hat
-    //
-    const start = () => {
+    /* =========================
+     * ⏱ INTERVAL
+     * ========================= */
+    function startInterval() {
         if (!getWebhook()) return;
-        startInterval();
-    };
 
-    //
-    // DS-Tools benötigt ~100–300ms, um DS_USER_SETTINGS zu setzen
-    //
-    const waitForDSTools = setInterval(() => {
+        if (window.__DS_INC_REMINDER_INTERVAL__) {
+            clearInterval(window.__DS_INC_REMINDER_INTERVAL__);
+        }
+
+        window.__DS_INC_REMINDER_INTERVAL__ =
+            setInterval(checkValue, INTERVAL_MS);
+    }
+
+    /* =========================
+     * 🚀 BOOTSTRAP
+     * ========================= */
+    const wait = setInterval(() => {
         if (window.DS_USER_SETTINGS) {
-            clearInterval(waitForDSTools);
-            start();
+            clearInterval(wait);
+            startInterval();
         }
     }, 100);
 
