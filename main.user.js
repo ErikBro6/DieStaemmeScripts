@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SpeckMichs Die Stämme Tool Collection
 // @namespace    https://github.com/EmoteBot6
-// @version      3.3.1
+// @version      3.3.2
 // @description  Erweitert die Die Stämme Erfahrung mit einigen Tools und Skripten
 // @author       SpeckMich
 // @connect      raw.githubusercontent.com
@@ -509,9 +509,18 @@
 
     // 2) Market
     if (ctx.screen === "market" && MODULES.market) {
+      const urls = [];
+
+      if (MODULES.market.global) {
+        urls.push(...toArray(MODULES.market.global));
+      }
+
       const key = ctx.mode && MODULES.market[ctx.mode] ? ctx.mode : "default";
+
+      urls.push(...toArray(MODULES.market[key]));
+
       return [
-        ...(await filterAndExtract("market", toArray(MODULES.market[key]))),
+        ...(await filterAndExtract("market", urls)),
         ...(await getGlobalUrls()),
       ];
     }

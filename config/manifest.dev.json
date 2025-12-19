@@ -255,7 +255,7 @@
         "defaultEnabled": true,
         "compliance": "legal"
       },
-      "default": {
+      "global": {
         "url": "menu/resBalancerMenuPoint.js",
         "id": "resBalancerMenu",
         "title": "Market-Menüpunkt",
@@ -263,7 +263,7 @@
         "defaultEnabled": true,
         "compliance": "legal"
       },
-      "url": {
+      "call": {
         "url": "modules/addUpRessources.js",
         "id": "addUpRessources",
         "title": "Rohstoffe aufaddieren",
