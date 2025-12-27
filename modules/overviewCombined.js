@@ -9,6 +9,13 @@
     };
   };
 
+  function formatShort(n) {
+    if (n >= 1_000_000)
+      return (n / 1_000_000).toFixed(1).replace(".", ",") + " M";
+    if (n >= 1_000) return (n / 1_000).toFixed(1).replace(".", ",") + " K";
+    return n.toString();
+  }
+
   function ready(fn) {
     const i = setInterval(() => {
       if (fn()) clearInterval(i);
@@ -70,8 +77,8 @@
       if (!th) return;
 
       th.innerHTML = th.innerHTML.replace(/<br>.*$/, "");
-      th.innerHTML += `<br><strong style="color:#d33">${val.toLocaleString(
-        "de-DE"
+      th.innerHTML += `<br><strong style="color:#d33">${formatShort(
+        val
       )}</strong>`;
     });
   }
@@ -106,9 +113,10 @@
 
     th.innerHTML = `
       Rohstoffe<br>
-      <span class="res wood">${wood.toLocaleString("de-DE")}</span>
-      <span class="res stone">${stone.toLocaleString("de-DE")}</span>
-      <span class="res iron">${iron.toLocaleString("de-DE")}</span>
+<span class="res wood">${formatShort(wood)}</span>
+<span class="res stone">${formatShort(stone)}</span>
+<span class="res iron">${formatShort(iron)}</span>
+
     `;
   }
 })();

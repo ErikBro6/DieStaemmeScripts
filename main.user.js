@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SpeckMichs Die Stämme Tool Collection
 // @namespace    https://github.com/EmoteBot6
-// @version      3.3.3
+// @version      3.3.4
 // @description  Erweitert die Die Stämme Erfahrung mit einigen Tools und Skripten
 // @author       SpeckMich
 // @connect      raw.githubusercontent.com
@@ -30,38 +30,13 @@
   const CONFIG = {
     cacheBustIntervalSec: 60,
     modules: {
-      place: [
-        "https://raw.githubusercontent.com/EmoteBot6/DieStaemmeScripts/<commit>/config/assetsBase.js",
-        "https://raw.githubusercontent.com/EmoteBot6/DieStaemmeScripts/<commit>/ui/toggleButton.js",
-        "https://raw.githubusercontent.com/EmoteBot6/DieStaemmeScripts/<commit>/modules/confirmEnhancer.js",
-        "https://raw.githubusercontent.com/EmoteBot6/DieStaemmeScripts/<commit>/modules/autoSender.js",
-        "https://raw.githubusercontent.com/EmoteBot6/DieStaemmeScripts/<commit>/modules/massSupporter.js",
-      ],
-      map: [
-        "https://raw.githubusercontent.com/EmoteBot6/DieStaemmeScripts/<commit>/config/assetsBase.js",
-        "https://raw.githubusercontent.com/EmoteBot6/DieStaemmeScripts/<commit>/ui/toggleButton.js",
-        "https://raw.githubusercontent.com/EmoteBot6/DieStaemmeScripts/<commit>/modules/confirmEnhancer.js",
-        "https://raw.githubusercontent.com/EmoteBot6/DieStaemmeScripts/<commit>/modules/lineMap.js",
-        "https://raw.githubusercontent.com/EmoteBot6/DieStaemmeScripts/<commit>/modules/tooltip.js",
-        "https://raw.githubusercontent.com/EmoteBot6/DieStaemmeScripts/<commit>/modules/pickVillages.js",
-      ],
-      overview_villages:
-        "https://raw.githubusercontent.com/EmoteBot6/DieStaemmeScripts/<commit>/modules/overviewCombined.js",
-      market: {
-        resource_balancer:
-          "https://raw.githubusercontent.com/EmoteBot6/DieStaemmeScripts/<commit>/modules/resBalancer.js",
-        default:
-          "https://raw.githubusercontent.com/EmoteBot6/DieStaemmeScripts/<commit>/menu/resBalancerMenuPoint.js",
-      },
-      attackPlannerEdit: [
-        "https://raw.githubusercontent.com/EmoteBot6/DieStaemmeScripts/<commit>/modules/dsUltimateTimingSaver.js",
-        "https://raw.githubusercontent.com/EmoteBot6/DieStaemmeScripts/<commit>/modules/dsUltimateAutoSender.js",
-      ],
+      global: [],
+      place: [],
+      map: []
     },
   };
 
   // --- Global BotGuard (top-level hard stop) -----------------------------------
-  // --- Global BotGuard (top-level, cross-tab) ---------------------------------
   const DS_BotGuard = (() => {
     const D = document;
 
@@ -330,19 +305,6 @@
 
   window.DS_USER_SETTINGS = {}; // wird nach bootstrap() gefüllt
 
-  async function loadPrefs() {
-    // migrate once from legacy URL-based => id-based (best-effort)
-    const current = await GM.getValue(PREFS_KEY, null);
-    if (current) return current;
-
-    const legacy = await GM.getValue(LEGACY_PREFS_KEY, null);
-    if (!legacy) return {};
-
-    // Keep as-is until we can map URLs to IDs on the fly (at evaluation time).
-    // We'll consult legacy inside isEnabledByPrefs if no id entry exists.
-    return {};
-  }
-
   async function savePrefs(p) {
     try {
       await GM.setValue(PREFS_KEY, p || {});
@@ -473,7 +435,7 @@
 
   async function resolveModuleUrls(ctx) {
     const MODULES = window.modules || {};
-    const flat = flattenModules(MODULES);
+    const flat = window.__DS_FLAT_MODULES__;
 
     // DS-Tools Settings Screen → keine Module laden
     if (isDsToolsSettingsScreen(ctx)) return [];
@@ -844,6 +806,7 @@
     // Expose
     window.DS_ASSETS_BASE = assetsBase;
     window.modules = deepFreeze(modules);
+    window.__DS_FLAT_MODULES__ = flattenModules(modules);
 
     // Always add the topbar entry
     injectTopbarLink();
@@ -879,7 +842,7 @@
     const container = document.querySelector("#content_value") || document.body;
     container.innerHTML = "";
 
-    const flat = flattenModules(mods);
+    const flat = window.__DS_FLAT_MODULES__;
     // build id → entry map (settings only)
     window.__DS_ENTRY_BY_ID__ = {};
     for (const list of Object.values(flat)) {
