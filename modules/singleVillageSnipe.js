@@ -836,6 +836,10 @@ function filterVillagesByChosenGroup() {
     });
 }
 
+jQuery(document).on('click', '.wb-copy', function () {
+    copyTextToClipboard(this.dataset.cmd);
+});
+
 // Helper: Copy string to clipboard
 function copyTextToClipboard(text) {
     const textArea = document.createElement('textarea');
@@ -1119,7 +1123,7 @@ function buildCombinationsTable(snipes, destinationVillage) {
             game_data.market !== 'uk'
                 ? `
                     <td>
-                        <a  target="_blank" rel="noopener noreferrer" class="btn" onclick="copyTextToClipboard('${wbCommand}');">
+                        <a  target="_blank" rel="noopener noreferrer" class="btn wb-copy" data-cmd="${wbCommand}">
                             ${tt('WB')}
                         </a>
                     </td>
