@@ -34,6 +34,14 @@
         "desc": "Angriffe können über Buttons markiert werden.",
         "defaultEnabled": true,
         "compliance": "legal"
+      },
+      {
+        "url": "modules/notification.js",
+        "id": "notification",
+        "title": "Global: Benachrichtigungen über Änderungen an der Collection",
+        "desc": "PopUp, welches nach Updates über wichtige Dinge informiert.",
+        "defaultEnabled": true,
+        "compliance": "legal"
       }
     ],
     "am_farm": [
@@ -112,19 +120,11 @@
         "compliance": "illegal"
       },
       {
-        "url": "modules/massScavenger.calc.js",
+        "url": "modules/massScavenge/massScavenger.js",
         "id": "calcMassScavenge",
         "title": "Versammlungsplatz: Massen-Raubzug-Rechner",
         "desc": "Berechner für Raubzug-Optimierung.",
         "defaultEnabled": true,
-        "compliance": "legal"
-      },
-      {
-        "url": "modules/massScavenger.auto.js",
-        "id": "autoMassScavenge",
-        "title": "Versammlungsplatz: Massen-Raubzug-Automatisierung",
-        "desc": "Automatisches Scavenging / Raubzüge.",
-        "defaultEnabled": false,
         "compliance": "illegal"
       },
       {
