@@ -53,35 +53,44 @@
     const rows = [...tbody.rows].filter((r) => r.querySelector("td"));
     if (!rows.length) return;
 
-    const farmIdx = [...rows[0].cells].findIndex((td) =>
-      td.querySelector('a[href*="screen=farm"]')
-    );
-    if (farmIdx === -1) return;
+    // Header-Zeile ist die erste tbody-Zeile (mit <th>)
+    const headerRow = tbody.rows[0];
+    if (!headerRow) return;
 
     const sums = [];
 
     rows.forEach((row) => {
-      row.querySelectorAll("td.unit-item:not(.hidden)").forEach((td, i) => {
-        const col = farmIdx + 1 + i;
+      // über ALLE unit-item Zellen gehen, aber hidden überspringen
+      row.querySelectorAll("td.unit-item").forEach((td) => {
+        if (td.classList.contains("hidden")) return;
+
+        const col = td.cellIndex; // <- entscheidend: echte Spalte in der Tabelle
         const v = parseInt(td.textContent.replace(/\./g, ""), 10) || 0;
+
         sums[col] = (sums[col] || 0) + v;
       });
     });
-
-    const headerRow = table.querySelector("tbody tr:first-child");
-    if (!headerRow) return;
 
     sums.forEach((val, col) => {
       if (!val) return;
       const th = headerRow.cells[col];
       if (!th) return;
 
-      th.innerHTML = th.innerHTML.replace(/<br>.*$/, "");
-      th.innerHTML += `<br><strong style="color:#d33">${formatShort(
-        val
-      )}</strong>`;
+      let box = th.querySelector(".dsu-sum-wrap");
+      if (!box) {
+        box = document.createElement("span");
+        box.className = "dsu-sum-wrap";
+        box.style.display = "block"; // statt <br>
+        box.style.marginTop = "2px";
+        th.appendChild(box);
+      }
+
+      box.textContent = formatShort(val);
+      box.style.color = "#d33";
+      box.style.fontWeight = "700";
     });
   }
+
   function initProduction() {
     const table = document.getElementById("production_table");
     if (!table || !table.tBodies[0]) return;

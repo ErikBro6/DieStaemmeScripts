@@ -1,46 +1,54 @@
 // modules/notification.js
 /* global Dialog, GM_info, GM */
 (() => {
-  'use strict';
+  "use strict";
 
   // idempotent
   if (window.__dsToolsNotificationLoaded) return;
   window.__dsToolsNotificationLoaded = true;
 
-  const LOG = (...a) => console.info('[DS-Notification]', ...a);
+  const LOG = (...a) => console.info("[DS-Notification]", ...a);
 
   // Nur im echten TW-Game (game.php)
-  if (!location.href.includes('game.php')) {
-    LOG('skip: not game.php');
+  if (!location.href.includes("game.php")) {
+    LOG("skip: not game.php");
     return;
   }
 
   // Version ermitteln
   const SCRIPT_VERSION =
-    (typeof GM_info !== 'undefined' && GM_info?.script?.version)
+    typeof GM_info !== "undefined" && GM_info?.script?.version
       ? GM_info.script.version
-      : (window.DS_TOOLS_VERSION || 'unknown');
+      : window.DS_TOOLS_VERSION || "unknown";
 
   // -----------------------------
   // >>> DEIN POPUP-INHALT <<<
   // Ändere hier was -> Digest ändert sich -> Popup erscheint wieder
   // -----------------------------
   const POPUP = {
-    id: '2026-01-02-newyear',
-    title: 'DS-Tools – Update',
+    enabled: false,
+    id: "2026-01-02-newyear",
+    title: "DS-Tools – Update",
     headline: `Frohes Neues! Neuigkeiten in v${SCRIPT_VERSION}`,
-    headerNote: 'Willkommen in SpeckMichs die Stämme Tool Collection. Über dieses neue PopUp informiere ich euch regelmässig über Neuigkeiten und Änderungen an der Tool-Collection.',
+    headerNote:
+      "Willkommen in SpeckMichs die Stämme Tool Collection. Über dieses neue PopUp informiere ich euch regelmässig über Neuigkeiten und Änderungen an der Tool-Collection.",
     changelog: [
-      'Massen Raubzug Automatisierung: Dateistruktur grundlegend überarbeitet. Oberfläche um eine Vorlage auf alle Dörfer anzuwenden hinzugefügt.',
-      'Massen Raubzug Rechner: Entfernt. Jetzt nur noch ein Modul: Massen Raubzug Automatisierung.',
-      'Notification: Neues Modul, über welches PopUps wie dieses hier angezeigt werden.',
+      "Massen Raubzug Automatisierung: Dateistruktur grundlegend überarbeitet. Oberfläche um eine Vorlage auf alle Dörfer anzuwenden hinzugefügt.",
+      "Massen Raubzug Rechner: Entfernt. Jetzt nur noch ein Modul: Massen Raubzug Automatisierung.",
+      "Notification: Neues Modul, über welches PopUps wie dieses hier angezeigt werden.",
     ],
     links: [
-      { label: 'GitHub', href: 'https://github.com/ErikBro6/DieStaemmeScripts' },
-      { label: 'Changelog', href: 'https://github.com/ErikBro6/DieStaemmeScripts/commits/master' },
-      { label: "Buy Me a Coffee", href: 'https://buymeacoffee.com/emotebot'}
+      {
+        label: "GitHub",
+        href: "https://github.com/ErikBro6/DieStaemmeScripts",
+      },
+      {
+        label: "Changelog",
+        href: "https://github.com/ErikBro6/DieStaemmeScripts/commits/master",
+      },
+      { label: "Buy Me a Coffee", href: "https://buymeacoffee.com/emotebot" },
     ],
-    footerNote: 'Dieses Popup erscheint nur einmal pro Version/Inhalt.',
+    footerNote: "Dieses Popup erscheint nur einmal pro Version/Inhalt.",
   };
 
   // FNV-1a 32bit
@@ -50,18 +58,17 @@
       h ^= str.charCodeAt(i);
       h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
     }
-    return ('0000000' + h.toString(16)).slice(-8);
+    return ("0000000" + h.toString(16)).slice(-8);
   }
 
-const TOKEN = String(POPUP.id);               // <-- nur diese ID entscheidet
-const STORE_KEY = 'dsTools.notification.lastSeenId';
-
+  const TOKEN = String(POPUP.id); // <-- nur diese ID entscheidet
+  const STORE_KEY = "dsTools.notification.lastSeenId";
 
   async function getSeenToken() {
     try {
-      return await GM.getValue(STORE_KEY, '');
+      return await GM.getValue(STORE_KEY, "");
     } catch {
-      return localStorage.getItem(STORE_KEY) || '';
+      return localStorage.getItem(STORE_KEY) || "";
     }
   }
 
@@ -75,10 +82,13 @@ const STORE_KEY = 'dsTools.notification.lastSeenId';
 
   function buildInnerHtml() {
     const links = POPUP.links
-      .map(l => `<a href="${l.href}" target="_blank" rel="noopener noreferrer">${l.label}</a>`)
-      .join(' &nbsp;|&nbsp; ');
+      .map(
+        (l) =>
+          `<a href="${l.href}" target="_blank" rel="noopener noreferrer">${l.label}</a>`
+      )
+      .join(" &nbsp;|&nbsp; ");
 
-    const items = POPUP.changelog.map(x => `<li>${x}</li>`).join('');
+    const items = POPUP.changelog.map((x) => `<li>${x}</li>`).join("");
 
     return `
       <h2 style="margin:0 0 10px 0;">${POPUP.headline}</h2>
@@ -106,9 +116,9 @@ const STORE_KEY = 'dsTools.notification.lastSeenId';
   }
 
   function showViaDialog(onClosed) {
-    if (typeof Dialog?.show !== 'function') return false;
+    if (typeof Dialog?.show !== "function") return false;
 
-    const name = 'ds_tools_notification';
+    const name = "ds_tools_notification";
     Dialog.show(name, buildInnerHtml());
 
     const boxId = `popup_box_${name}`;
@@ -117,7 +127,7 @@ const STORE_KEY = 'dsTools.notification.lastSeenId';
     // OK-Button -> Dialog schließen
     const handler = (ev) => {
       const t = ev.target;
-      if (t && t.id === 'ds_notif_ok') {
+      if (t && t.id === "ds_notif_ok") {
         ev.preventDefault();
         // close button exists in TW dialogs
         const closeBtn = document.querySelector(`#${boxId} .popup_box_close`);
@@ -125,11 +135,11 @@ const STORE_KEY = 'dsTools.notification.lastSeenId';
         else document.getElementById(boxId)?.remove();
       }
     };
-    document.addEventListener('click', handler, true);
+    document.addEventListener("click", handler, true);
 
     // cleanup wenn geschlossen
     observeClose(boxId, () => {
-      document.removeEventListener('click', handler, true);
+      document.removeEventListener("click", handler, true);
       onClosed();
     });
 
@@ -137,22 +147,22 @@ const STORE_KEY = 'dsTools.notification.lastSeenId';
   }
 
   function showViaPopupDiv(onClosed) {
-    const id = 'ds_notification_popup';
+    const id = "ds_notification_popup";
     if (document.getElementById(id)) return;
 
-    const wrap = document.createElement('div');
+    const wrap = document.createElement("div");
     wrap.id = id;
-    wrap.className = 'popup_style';
+    wrap.className = "popup_style";
     wrap.style.cssText = [
-      'display:block',
-      'position:fixed',
-      'top:15%',
-      'left:50%',
-      'transform:translateX(-50%)',
-      'z-index:99999',
-      'width:560px',
-      'max-width:calc(100vw - 40px)',
-    ].join(';');
+      "display:block",
+      "position:fixed",
+      "top:15%",
+      "left:50%",
+      "transform:translateX(-50%)",
+      "z-index:99999",
+      "width:560px",
+      "max-width:calc(100vw - 40px)",
+    ].join(";");
 
     wrap.innerHTML = `
       <div class="popup_menu">
@@ -172,22 +182,29 @@ const STORE_KEY = 'dsTools.notification.lastSeenId';
       onClosed();
     };
 
-    wrap.querySelector('#ds_notification_close')?.addEventListener('click', close);
-    wrap.querySelector('#ds_notif_ok')?.addEventListener('click', close);
+    wrap
+      .querySelector("#ds_notification_close")
+      ?.addEventListener("click", close);
+    wrap.querySelector("#ds_notif_ok")?.addEventListener("click", close);
   }
 
   async function run() {
+    if (!POPUP.enabled) {
+      LOG("skip: popup disabled");
+      return;
+    }
+
     const seen = await getSeenToken();
-    LOG('version=', SCRIPT_VERSION, 'seenToken=', seen);
+    LOG("version=", SCRIPT_VERSION, "seenToken=", seen);
 
     if (seen === TOKEN) {
-      LOG('skip: already seen');
+      LOG("skip: already seen");
       return;
     }
 
     const onClosed = async () => {
       await setSeenToken(TOKEN);
-      LOG('marked as seen:', TOKEN);
+      LOG("marked as seen:", TOKEN);
     };
 
     const ok = showViaDialog(onClosed);
@@ -196,14 +213,17 @@ const STORE_KEY = 'dsTools.notification.lastSeenId';
 
   // Debug/Reset im TM-Menü
   try {
-    if (typeof GM_registerMenuCommand === 'function') {
-      GM_registerMenuCommand('[DS-Tools] Update-Popup öffnen (force)', async () => {
-        await setSeenToken(''); // reset
-        run();
-      });
-      GM_registerMenuCommand('[DS-Tools] Update-Popup Reset', async () => {
-        await setSeenToken('');
-        LOG('reset done');
+    if (typeof GM_registerMenuCommand === "function") {
+      GM_registerMenuCommand(
+        "[DS-Tools] Update-Popup öffnen (force)",
+        async () => {
+          await setSeenToken(""); // reset
+          run();
+        }
+      );
+      GM_registerMenuCommand("[DS-Tools] Update-Popup Reset", async () => {
+        await setSeenToken("");
+        LOG("reset done");
       });
     }
   } catch {}
