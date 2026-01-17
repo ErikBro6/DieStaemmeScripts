@@ -2,7 +2,13 @@
 (() => {
   'use strict';
 
-  if (!window.DS_BotGuard || !window.DS_USER_SETTINGS) return;
+  // If the core script already installed a notifier, don't double-fire.
+  if (window.__DS_BOTGUARD_NOTIFIER_INSTALLED__) return;
+  window.__DS_BOTGUARD_NOTIFIER_INSTALLED__ = true;
+
+  if (!window.DS_BotGuard) return;
+
+  const USER_SETTINGS_KEY = 'dsToolsUserSettings';
 
   let lastNotify = 0;
   const COOLDOWN = 30_000; // 30s Sicherheit gegen Reload-Flapping
@@ -21,8 +27,21 @@
     return location.hostname.match(/^(.*?)\.die-staemme\.de$/)?.[1] || 'Unbekannt';
   }
 
-  function notify() {
-    const webhook = window.DS_USER_SETTINGS.incWebhookURL?.trim();
+  async function getWebhook() {
+    try {
+      const fromWindow = window.DS_USER_SETTINGS?.incWebhookURL;
+      if (fromWindow && String(fromWindow).trim()) return String(fromWindow).trim();
+
+      if (typeof GM === 'undefined' || typeof GM.getValue !== 'function') return '';
+      const s = await GM.getValue(USER_SETTINGS_KEY, {});
+      return s?.incWebhookURL ? String(s.incWebhookURL).trim() : '';
+    } catch {
+      return '';
+    }
+  }
+
+  async function notify() {
+    const webhook = await getWebhook();
     if (!webhook) return;
 
     if (Date.now() - lastNotify < COOLDOWN) return;
@@ -46,5 +65,8 @@
   window.DS_BotGuard.onChange((active) => {
     if (active) notify();
   });
+
+  // In case the page loads with BotGuard already active
+  if (window.DS_BotGuard.isActive()) notify();
 
 })();

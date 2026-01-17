@@ -1,12 +1,13 @@
 // ==UserScript==
 // @name         SpeckMichs Die Stämme Tool Collection
 // @namespace    https://github.com/EmoteBot6
-// @version      3.3.10
+// @version      3.3.11
 // @description  Erweitert die Die Stämme Erfahrung mit einigen Tools und Skripten
 // @author       SpeckMich
 // @connect      raw.githubusercontent.com
 // @connect      localhost
 // @connect      cdn.jsdelivr.net
+// @connect      discord.com
 // @match        https://*.die-staemme.de/game.php?*
 // @match        https://*ds-ultimate.de/tools/attackPlanner/*
 // @icon         https://pbs.twimg.com/profile_images/1456997417807716357/oX-R0v9l_400x400.png
@@ -44,8 +45,6 @@
       ".bot-protection-row",
       ".bot-protection-blur",
       "#content_value .captcha",
-      "#welcome-page",
-      "#welcome-page-footer-right .btn-confirm-yes",
     ];
 
     const isVisible = (el) =>
@@ -153,6 +152,93 @@
       mountBanner,
       unmountBanner,
     };
+  })();
+
+  // Expose for modules / external helpers
+  window.DS_BotGuard = DS_BotGuard;
+
+  // --- BotGuard -> Discord notification (safe even while BotGuard is active) ---
+  (function setupBotGuardDiscordNotifier() {
+    // prevent double-install (e.g. if a separate module also exists)
+    if (window.__DS_BOTGUARD_NOTIFIER_INSTALLED__) return;
+    window.__DS_BOTGUARD_NOTIFIER_INSTALLED__ = true;
+
+    const USER_SETTINGS_KEY = "dsToolsUserSettings";
+    const COOLDOWN_MS = 30_000;
+    let lastNotifyAt = 0;
+
+    const getWorld = () => {
+      try {
+        return (window.game_data && game_data.world) || location.hostname;
+      } catch {
+        return location.hostname;
+      }
+    };
+
+    const getPlayer = () => {
+      try {
+        return (window.game_data && game_data.player && game_data.player.name) || "unknown";
+      } catch {
+        return "unknown";
+      }
+    };
+
+    async function getWebhookUrl() {
+      try {
+        // prefer loaded settings if available, otherwise read directly from storage
+        const fromWindow = (window.DS_USER_SETTINGS && window.DS_USER_SETTINGS.incWebhookURL)
+          ? String(window.DS_USER_SETTINGS.incWebhookURL).trim()
+          : "";
+        if (fromWindow) return fromWindow;
+
+        if (typeof GM === "undefined" || typeof GM.getValue !== "function") return "";
+        const s = await GM.getValue(USER_SETTINGS_KEY, {});
+        return (s && s.incWebhookURL ? String(s.incWebhookURL).trim() : "");
+      } catch {
+        return "";
+      }
+    }
+
+    async function notifyBotGuard() {
+      const now = Date.now();
+      if (now - lastNotifyAt < COOLDOWN_MS) return;
+
+      const webhook = await getWebhookUrl();
+      if (!webhook) return;
+
+      lastNotifyAt = now;
+
+      const payload = {
+        content: `\u26a0\ufe0f Bot-Schutz erkannt!\nWorld: ${getWorld()}\nSpieler: ${getPlayer()}\nZeit: ${new Date().toLocaleString("de-DE")}`,
+      };
+
+      // GM_xmlhttpRequest is safer in userscripts (CORS), but fetch works for Discord webhooks too.
+      try {
+        if (typeof GM_xmlhttpRequest === "function") {
+          GM_xmlhttpRequest({
+            method: "POST",
+            url: webhook,
+            headers: { "Content-Type": "application/json" },
+            data: JSON.stringify(payload),
+          });
+          return;
+        }
+      } catch {}
+
+      try {
+        fetch(webhook, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        }).catch(() => {});
+      } catch {}
+    }
+
+    // fire immediately if we loaded while BotGuard is already on
+    if (DS_BotGuard.isActive()) notifyBotGuard();
+    DS_BotGuard.onChange((active) => {
+      if (active) notifyBotGuard();
+    });
   })();
 
   // --- Global pause helpers for modules ---------------------------------------
