@@ -15,10 +15,12 @@
     const st = loadSettings() || {};
     const gt = st.globalTemplate || { units: null, max: {} };
 
+    // enabled === null => default ("all units")
+    // enabled === []   => explicitly none
     const enabled =
-      Array.isArray(gt.units) && gt.units.length
+      Array.isArray(gt.units)
         ? gt.units
-        : Array.isArray(st.enabledUnits) && st.enabledUnits.length
+        : Array.isArray(st.enabledUnits)
           ? st.enabledUnits
           : null;
 
@@ -92,7 +94,7 @@
       cb.type = 'checkbox';
       cb.className = 'globalUnitToggle';
       cb.dataset.unit = unit;
-      cb.checked = !enabled || !enabled.length || enabled.includes(unit);
+      cb.checked = (enabled == null) ? true : enabled.includes(unit);
 
       const maxInput = document.createElement('input');
       maxInput.type = 'number';
@@ -118,7 +120,27 @@
     applyBtn.className = 'btn ds-mass-apply-all';
     applyBtn.textContent = 'Auf alle Dörfer anwenden';
 
-    actionTd.appendChild(applyBtn);
+    const saveBtn = document.createElement('button');
+    saveBtn.type = 'button';
+    saveBtn.className = 'btn ds-mass-save';
+    saveBtn.textContent = 'Einstellungen speichern';
+    saveBtn.style.marginTop = '6px';
+
+    const clearBtn = document.createElement('button');
+    clearBtn.type = 'button';
+    clearBtn.className = 'btn ds-mass-clear';
+    clearBtn.textContent = 'Mit allem Farmen';
+    clearBtn.style.marginTop = '6px';
+
+    const actionsWrap = document.createElement('div');
+    actionsWrap.style.display = 'flex';
+    actionsWrap.style.flexDirection = 'column';
+    actionsWrap.style.gap = '6px';
+    actionsWrap.appendChild(applyBtn);
+    actionsWrap.appendChild(saveBtn);
+    actionsWrap.appendChild(clearBtn);
+
+    actionTd.appendChild(actionsWrap);
     inputTr.appendChild(actionTd);
 
     tbody.appendChild(inputTr);
@@ -215,7 +237,7 @@
       cb.className = 'villageUnitToggle';
       cb.dataset.village = vKey;
       cb.dataset.unit = unit;
-      cb.checked = !enabledForVillage || !enabledForVillage.length || enabledForVillage.includes(unit);
+      cb.checked = (enabledForVillage == null) ? true : enabledForVillage.includes(unit);
 
       const maxInput = document.createElement('input');
       maxInput.type = 'number';

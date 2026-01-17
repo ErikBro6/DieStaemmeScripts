@@ -22,7 +22,10 @@
     const vCfg = getVillageConfig(villageId);
     let result = vCfg.units;
 
-    if (!Array.isArray(result) || !result.length) {
+    // Semantik:
+    //   null/undefined => default (global/all)
+    //   []             => ausdrücklich keine
+    if (!Array.isArray(result)) {
       const st = loadSettings();
       if (Array.isArray(st.enabledUnits) && st.enabledUnits.length) result = st.enabledUnits.slice();
       else result = allUnits;
@@ -206,14 +209,20 @@ function selectCell(cellObj) {
     if (Array.isArray(st.enabledUnits) && st.enabledUnits.length) return [...st.enabledUnits];
 
     const units = new Set();
+    const allVillageToggles = document.querySelectorAll('.ds-mass-village-units input.villageUnitToggle');
+
     document.querySelectorAll('.ds-mass-village-units input.villageUnitToggle:checked').forEach(cb => {
       const u = cb.dataset.unit;
       if (u) units.add(u);
     });
 
-    const cfgLocal = parseMassConfig();
-    if (!units.size && cfgLocal && cfgLocal.unitDefs) return Object.keys(cfgLocal.unitDefs);
+    // Wenn UI noch nicht da ist, fall back auf alle Units.
+    if (!allVillageToggles.length) {
+      const cfgLocal = parseMassConfig();
+      if (cfgLocal && cfgLocal.unitDefs) return Object.keys(cfgLocal.unitDefs);
+    }
 
+    // Wenn UI existiert und nichts angehakt ist: wirklich "keine".
     return Array.from(units);
   }
 

@@ -59,8 +59,11 @@ const guardAction = DSGuards?.guardAction ? DSGuards.guardAction.bind(DSGuards) 
         units = units.filter(u => u !== unit);
       }
 
-      // Leere Liste -> als "null" behandeln (bedeutet: alle Units)
-      st.globalTemplate.units = units.length ? units : null;
+      // Speichern wie ausgewählt:
+      //   null => default/all (wenn wirklich alle angehakt)
+      //   []   => ausdrücklich keine
+      const total = document.querySelectorAll('#ds-mass-global-units-row input.globalUnitToggle').length;
+      st.globalTemplate.units = (total && units.length === total) ? null : units;
       NS.settings.saveSettings(st);
     });
 
@@ -164,6 +167,12 @@ const guardAction = DSGuards?.guardAction ? DSGuards.guardAction.bind(DSGuards) 
         st.enabledUnits = null; // ab jetzt pro Dorf
         NS.settings.saveSettings(st);
 
+        try {
+          if (window.UI && typeof window.UI.SuccessMessage === 'function') {
+            window.UI.SuccessMessage('Einstellungen gespeichert.');
+          }
+        } catch { /* ignore */ }
+
         console.log('[DSMassScavenger] Defaults pro Dorf gespeichert:', st);
       });
 
@@ -204,8 +213,11 @@ const guardAction = DSGuards?.guardAction ? DSGuards.guardAction.bind(DSGuards) 
           if (Number.isFinite(val) && val > 0) maxCfg[u] = val;
         });
 
-        // Leere Auswahl = "alle Units" (weil collectEnabledUnitsForVillage sonst auf global/allUnits fällt)
-        const unitsVal = selectedUnits.length ? selectedUnits : null;
+        // Semantik:
+        //   null => default/all (wenn wirklich alle angehakt)
+        //   []   => ausdrücklich keine
+        const total = rootRow.querySelectorAll('input.globalUnitToggle').length;
+        const unitsVal = (total && selectedUnits.length === total) ? null : selectedUnits;
 
         // alle Dörfer einsammeln
         const villageIds = new Set();
@@ -220,14 +232,14 @@ const guardAction = DSGuards?.guardAction ? DSGuards.guardAction.bind(DSGuards) 
 
         villageIds.forEach(vId => {
           st.perVillage[vId] = {
-            units: unitsVal ? unitsVal.slice() : null,
+            units: unitsVal === null ? null : unitsVal.slice(),
             max: { ...maxCfg },
           };
 
           // UI spiegeln
           root.querySelectorAll(`.ds-mass-village-units input.villageUnitToggle[data-village="${CSS.escape(vId)}"]`).forEach(cb => {
             const u = cb.dataset.unit;
-            cb.checked = unitsVal ? unitsVal.includes(u) : true;
+            cb.checked = unitsVal === null ? true : unitsVal.includes(u);
           });
           root.querySelectorAll(`.ds-mass-village-units input.villageUnitMax[data-village="${CSS.escape(vId)}"]`).forEach(inp => {
             const u = inp.dataset.unit;
@@ -236,7 +248,7 @@ const guardAction = DSGuards?.guardAction ? DSGuards.guardAction.bind(DSGuards) 
         });
 
         st.enabledUnits = null; // ab jetzt pro Dorf
-        st.globalTemplate = { units: unitsVal ? unitsVal.slice() : null, max: { ...maxCfg } };
+        st.globalTemplate = { units: unitsVal === null ? null : unitsVal.slice(), max: { ...maxCfg } };
         NS.settings.saveSettings(st);
 
         try {

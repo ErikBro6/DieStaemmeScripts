@@ -19,6 +19,7 @@
 
       const parsed = JSON.parse(raw);
 
+      // enabledUnits (legacy global): keep array as-is (including empty) so "no units" can be expressed.
       const enabledUnits = Array.isArray(parsed.enabledUnits) ? parsed.enabledUnits : null;
       const perVillage =
         parsed.perVillage && typeof parsed.perVillage === 'object'
@@ -28,7 +29,8 @@
       const globalTemplate = (() => {
         const gt = parsed.globalTemplate;
         if (!gt || typeof gt !== 'object') return { ...DEFAULT_SETTINGS.globalTemplate };
-        const units = Array.isArray(gt.units) && gt.units.length ? gt.units.slice() : null;
+        // units: null => default/all units, [] => explicitly none
+        const units = Array.isArray(gt.units) ? gt.units.slice() : null;
         const max = gt.max && typeof gt.max === 'object' ? { ...gt.max } : {};
         return { units, max };
       })();
@@ -42,12 +44,13 @@
   function saveSettings(st) {
     try {
       const safe = {
-        enabledUnits: Array.isArray(st.enabledUnits) && st.enabledUnits.length ? st.enabledUnits : null,
+        // allow [] to mean "no units"
+        enabledUnits: Array.isArray(st.enabledUnits) ? st.enabledUnits : null,
         perVillage: st.perVillage && typeof st.perVillage === 'object' ? st.perVillage : {},
         globalTemplate: (() => {
           const gt = st.globalTemplate;
           if (!gt || typeof gt !== 'object') return { ...DEFAULT_SETTINGS.globalTemplate };
-          const units = Array.isArray(gt.units) && gt.units.length ? gt.units : null;
+          const units = Array.isArray(gt.units) ? gt.units : null;
           const max = gt.max && typeof gt.max === 'object' ? gt.max : {};
           return { units, max };
         })(),

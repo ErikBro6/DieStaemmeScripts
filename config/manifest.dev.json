@@ -56,14 +56,6 @@
     ],
     "place": [
       {
-        "url": "config/assetsBase.js",
-        "id": "assetsBaseMap",
-        "title": "Versammlungsplatz: Style Elemente",
-        "desc": "Grund-Styles/Assets für Versammlungsplatz-Tools.",
-        "defaultEnabled": true,
-        "compliance": "legal"
-      },
-      {
         "url": "ui/toggleButton.js",
         "id": "toggleButtonMap",
         "title": "Versammlungsplatz: Toggle-Button",
@@ -155,14 +147,6 @@
       }
     ],
     "map": [
-      {
-        "url": "config/assetsBase.js",
-        "id": "assetsBaseMap",
-        "title": "Karte: Style Elemente",
-        "desc": "Grund-Styles/Assets für Kartentools.",
-        "defaultEnabled": true,
-        "compliance": "legal"
-      },
       {
         "url": "ui/toggleButton.js",
         "id": "toggleButtonMap",
