@@ -211,22 +211,5 @@
     if (!ok) showViaPopupDiv(onClosed);
   }
 
-  // Debug/Reset im TM-Menü
-  try {
-    if (typeof GM_registerMenuCommand === "function") {
-      GM_registerMenuCommand(
-        "[DS-Tools] Update-Popup öffnen (force)",
-        async () => {
-          await setSeenToken(""); // reset
-          run();
-        }
-      );
-      GM_registerMenuCommand("[DS-Tools] Update-Popup Reset", async () => {
-        await setSeenToken("");
-        LOG("reset done");
-      });
-    }
-  } catch {}
-
   run();
 })();
