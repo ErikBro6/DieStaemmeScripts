@@ -190,7 +190,6 @@
 
   async function run() {
     if (!POPUP.enabled) {
-      LOG("skip: popup disabled");
       return;
     }
 
