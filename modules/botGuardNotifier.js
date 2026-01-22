@@ -10,53 +10,19 @@
 
   const USER_SETTINGS_KEY = 'dsToolsUserSettings';
 
-  let lastNotify = 0;
-  const COOLDOWN = 30_000; // 30s Sicherheit gegen Reload-Flapping
-
-  // ✅ Hard cap: maximal alle 30 Minuten (persistiert über Reloads)
-  const HARD_CAP_MS = 30 * 60_000;
-  const LAST_SENT_KEY = 'ds_botguard_last_notify_ts';
-
-  function nowTs() {
-    return Date.now();
-  }
-
-  async function getLastSentTs() {
-    // Prefer GM storage (works across reloads, usually per-script)
-    try {
-      if (typeof GM !== 'undefined' && typeof GM.getValue === 'function') {
-        const v = await GM.getValue(LAST_SENT_KEY, 0);
-        return Number(v) || 0;
-      }
-    } catch {}
-
-    // Fallback: localStorage
-    try {
-      const v = localStorage.getItem(LAST_SENT_KEY);
-      return v ? Number(v) || 0 : 0;
-    } catch {}
-
-    return 0;
-  }
-
-  async function setLastSentTs(ts) {
-    try {
-      if (typeof GM !== 'undefined' && typeof GM.setValue === 'function') {
-        await GM.setValue(LAST_SENT_KEY, ts);
-        return;
-      }
-    } catch {}
-
-    try {
-      localStorage.setItem(LAST_SENT_KEY, String(ts));
-    } catch {}
-  }
+  // ✅ One-shot: genau 1 Nachricht pro Page-Load
+  let sentThisSession = false;
 
   function getPlayerName() {
-        const el =
-            document.querySelector('td.menu-column-item a[href*="screen=info_player"]') ||
-            document.querySelector('#topdisplay a[href*="info_player"]');
-        return el ? el.textContent.trim() : 'Unbekannt';
+    // game_data ist in DS meist vorhanden; fallback auf DOM
+    try {
+      if (window.game_data?.player?.name) return String(window.game_data.player.name);
+    } catch {}
+
+    const el =
+      document.querySelector('td.menu-column-item a[href*="screen=info_player"]') ||
+      document.querySelector('#topdisplay a[href*="info_player"]');
+    return el ? el.textContent.trim() : 'Unbekannt';
   }
 
   function getWorld() {
@@ -76,21 +42,13 @@
     }
   }
 
-  async function notify() {
+  async function notifyOnce() {
+    // ✅ Hard stop after first send attempt in this session
+    if (sentThisSession) return;
+    sentThisSession = true;
+
     const webhook = await getWebhook();
     if (!webhook) return;
-
-    // ✅ Hard cap (persistiert)
-    const lastSent = await getLastSentTs();
-    const now = nowTs();
-    if (now - lastSent < HARD_CAP_MS) return;
-
-    // bestehender kurzer Flap-Cooldown (nur in-memory)
-    if (now - lastNotify < COOLDOWN) return;
-    lastNotify = now;
-
-    // wichtig: erst timestamp setzen, damit bei Reload-Spam sofort gedeckelt ist
-    await setLastSentTs(now);
 
     fetch(webhook, {
       method: 'POST',
@@ -107,11 +65,13 @@
   }
 
   // 🔥 exakt ein Hook – keine Logik duplizieren
-  window.DS_BotGuard.onChange((active) => {
-    if (active) notify();
+  // Optional: wenn onChange ein unsubscribe zurückgibt, nutzen wir das.
+  const unsub = window.DS_BotGuard.onChange((active) => {
+    if (!active) return;
+    notifyOnce();
+    if (typeof unsub === 'function') unsub(); // sauber "abschalten" falls unterstützt
   });
 
   // In case the page loads with BotGuard already active
-  if (window.DS_BotGuard.isActive()) notify();
-
+  if (window.DS_BotGuard.isActive()) notifyOnce();
 })();

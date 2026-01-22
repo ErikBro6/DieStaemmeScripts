@@ -104,43 +104,54 @@
     return allOk;
   }
 
-  // --- NEW: Decide button based on unit composition, not URL ---
-  function getUnitVal(name) {
-    const el = document.querySelector(`input.unitsInput[name="${name}"]`);
-    return el ? Number((el.value || '0').trim()) || 0 : 0;
+  // --- NEW: Decide button based on DS-Ultimate command type ---
+  const GM_API = (typeof GM !== 'undefined' && GM && typeof GM.getValue === 'function') ? GM : null;
+
+  const SUPPORT_TYPES = new Set([
+    'Unterstützung',
+    'Stand Unterstützung',
+    'Schnelle Unterstützung',
+    'Fake Unterstützung',
+  ]);
+
+  // TTL damit ein alter Wert nicht “hängen bleibt”
+  const COMMAND_TTL_MS = 5 * 60 * 1000;
+
+  async function getPendingCommandType() {
+    if (!GM_API) return null;
+    try {
+      const v = await GM_API.getValue('pending_command_type', null);
+      if (!v || !v.createdAt) return null;
+      if ((Date.now() - v.createdAt) > COMMAND_TTL_MS) return null;
+      return (v.commandType || null);
+    } catch {
+      return null;
+    }
   }
 
-  // Offense & defense families (includes archery-world variants if present)
-  const OFFENSE_UNITS = ['axe','light','ram','catapult','marcher','knight']; // 'marcher' for mounted archers (if enabled), knight counts as offensive for intent
-  const DEFENSE_UNITS = ['spear','sword','heavy','archer']; // 'archer' on archery worlds
+  let commandTypePromise = null;
 
-  function pickButton() {
+  function pickButtonSync(commandType) {
     const attackBtn  = document.querySelector('#target_attack');
     const supportBtn = document.querySelector('#target_support');
 
-    // if support button doesn't exist, fallback to attack
     if (!supportBtn) return attackBtn || null;
 
-    // compute sums after ensureUnitsIfNeeded() has possibly modified inputs
-    let sumOff = 0, sumDef = 0;
-
-    for (const u of OFFENSE_UNITS) sumOff += getUnitVal(u);
-    for (const u of DEFENSE_UNITS) sumDef += getUnitVal(u);
-
-    // Decision:
-    // - If there's any offense, prefer ATTACK.
-    // - Else if there's any defense (and no offense), choose SUPPORT.
-    // - Else fallback to ATTACK.
-    if (sumOff > 0) return attackBtn || supportBtn || null;
-    if (sumDef > 0) return supportBtn;
+    if (commandType && SUPPORT_TYPES.has(commandType)) return supportBtn;
     return attackBtn || supportBtn || null;
   }
 
-  function tryClick() {
+  async function pickButton() {
+    // einmal laden (nicht bei jedem Tick)
+    if (!commandTypePromise) commandTypePromise = getPendingCommandType();
+    const commandType = await commandTypePromise;
+    return pickButtonSync(commandType);
+  }
+
+  async function tryClick() {
     if (!ensureUnitsIfNeeded()) return false;
 
-    // was: const btn = document.querySelector(BTN_SEL);
-    const btn = pickButton();
+    const btn = await pickButton();
     if (!btn || btn.disabled) return false;
 
     prepareFormForAuto(btn);
@@ -149,19 +160,22 @@
     return true;
   }
 
-  if (tryClick()) return;
+  // async bootstrap
+  (async () => {
+    if (await tryClick()) return;
 
-  const start = Date.now();
-  const iv = setInterval(() => {
-    if (tryClick()) {
-      clearInterval(iv);
-    } else if (Date.now() - start > TIMEOUT_MS) {
-      clearInterval(iv);
-    }
-  }, SCAN_MS);
+    const start = Date.now();
+    const iv = setInterval(async () => {
+      if (await tryClick()) {
+        clearInterval(iv);
+      } else if (Date.now() - start > TIMEOUT_MS) {
+        clearInterval(iv);
+      }
+    }, SCAN_MS);
 
-  const mo = new MutationObserver(() => { tryClick(); });
-  mo.observe(document.documentElement, { childList: true, subtree: true });
-  setTimeout(() => mo.disconnect(), TIMEOUT_MS);
+    const mo = new MutationObserver(() => { tryClick(); });
+    mo.observe(document.documentElement, { childList: true, subtree: true });
+    setTimeout(() => mo.disconnect(), TIMEOUT_MS);
+  })();
 
 })();

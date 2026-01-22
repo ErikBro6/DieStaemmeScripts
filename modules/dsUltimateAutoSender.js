@@ -13,6 +13,29 @@
   let autoEnabled = JSON.parse(localStorage.getItem(STORAGE_KEY_ENABLED)) ?? true;
   let triggerSec  = parseInt(localStorage.getItem(STORAGE_KEY_TRIGGER)) || 10;
   triggerSec = Math.max(1, Math.min(20, triggerSec));
+// --- NEW (minimal): store DS-Ultimate command type for next tab ---
+const GM_API = (typeof GM !== 'undefined' && GM && typeof GM.setValue === 'function') ? GM : null;
+
+function getCommandType(tr) {
+  const imgs = tr?.querySelectorAll('img#type_img');
+  const last = (imgs && imgs.length) ? imgs[imgs.length - 1] : null;
+  const label =
+    last?.getAttribute('data-content')?.trim() ||
+    last?.dataset?.content?.trim() ||
+    '';
+  return label || null;
+}
+
+function storeCommandType(tr) {
+  if (!GM_API) return;
+  const commandType = getCommandType(tr);
+  // bewusst simpel: nur ein String + timestamp
+  GM_API.setValue('pending_command_type', {
+    createdAt: Date.now(),
+    commandType,
+  });
+}
+
 
   // -------------------------------------------------------------
   // STYLE PANEL (Baba Farmer Style)
@@ -143,6 +166,10 @@
     fired.add(rowId);
 
     const token = `auto_${rowId}_${Date.now()}`;
+
+    // NEW (MINIMAL): commandType für autoSender speichern
+    storeCommandType(tr);
+
     openAutoTab(a.href, token);
 
     tr.style.outline = "2px solid limegreen";
