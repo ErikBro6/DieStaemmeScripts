@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SpeckMichs Die Stämme Tool Collection
 // @namespace    https://github.com/EmoteBot6
-// @version      3.3.13
+// @version      3.3.14
 // @description  Erweitert die Die Stämme Erfahrung mit einigen Tools und Skripten
 // @author       SpeckMich
 // @connect      raw.githubusercontent.com
@@ -164,8 +164,7 @@
     window.__DS_BOTGUARD_NOTIFIER_INSTALLED__ = true;
 
     const USER_SETTINGS_KEY = "dsToolsUserSettings";
-    const COOLDOWN_MS = 30_000;
-    let lastNotifyAt = 0;
+    let sentThisPage = false;
 
     const getWorld = () => {
       try {
@@ -175,41 +174,93 @@
       }
     };
 
-    const getPlayer = () => {
+    const PLAYER_NAME_KEY = "__ds_tools_player_name";
+
+    const getCachedPlayerName = () => {
       try {
-        return (window.game_data && game_data.player && game_data.player.name) || "unknown";
+        return sessionStorage.getItem(PLAYER_NAME_KEY) || "";
       } catch {
-        return "unknown";
+        return "";
       }
+    };
+
+    const cachePlayerName = (name) => {
+      if (!name || name === "Unbekannt" || name === "unknown") return;
+      try {
+        sessionStorage.setItem(PLAYER_NAME_KEY, name);
+      } catch {}
+    };
+
+    const getPlayer = () => {
+      // preferred DOM path (same as incReminder)
+      const el =
+        document.querySelector(
+          'td.menu-column-item a[href*="screen=info_player"]'
+        ) || document.querySelector('#topdisplay a[href*="info_player"]');
+      if (el && el.textContent) {
+        const name = el.textContent.trim();
+        if (name) {
+          cachePlayerName(name);
+          return name;
+        }
+      }
+
+      // fallback: game_data
+      try {
+        const gd = window.game_data && game_data.player && game_data.player.name;
+        if (gd) {
+          const name = String(gd);
+          cachePlayerName(name);
+          return name;
+        }
+      } catch {}
+
+      // cached (session)
+      const cached = getCachedPlayerName();
+      return cached || "Unbekannt";
     };
 
     async function getWebhookUrl() {
       try {
         // prefer loaded settings if available, otherwise read directly from storage
-        const fromWindow = (window.DS_USER_SETTINGS && window.DS_USER_SETTINGS.incWebhookURL)
-          ? String(window.DS_USER_SETTINGS.incWebhookURL).trim()
-          : "";
+        const fromWindow =
+          window.DS_USER_SETTINGS && window.DS_USER_SETTINGS.incWebhookURL
+            ? String(window.DS_USER_SETTINGS.incWebhookURL).trim()
+            : "";
         if (fromWindow) return fromWindow;
 
-        if (typeof GM === "undefined" || typeof GM.getValue !== "function") return "";
+        if (typeof GM === "undefined" || typeof GM.getValue !== "function")
+          return "";
         const s = await GM.getValue(USER_SETTINGS_KEY, {});
-        return (s && s.incWebhookURL ? String(s.incWebhookURL).trim() : "");
+        return s && s.incWebhookURL ? String(s.incWebhookURL).trim() : "";
       } catch {
         return "";
       }
     }
 
+    function hasAlreadyNotified() {
+      if (sentThisPage) return true;
+      if (window.__DS_BOTGUARD_NOTIFIED__) return true;
+      return false;
+    }
+
+    function markNotified() {
+      sentThisPage = true;
+      window.__DS_BOTGUARD_NOTIFIED__ = true;
+    }
+
     async function notifyBotGuard() {
-      const now = Date.now();
-      if (now - lastNotifyAt < COOLDOWN_MS) return;
+      if (hasAlreadyNotified()) return;
 
       const webhook = await getWebhookUrl();
       if (!webhook) return;
 
-      lastNotifyAt = now;
+      markNotified();
 
       const payload = {
-        content: `\u26a0\ufe0f Bot-Schutz erkannt!\nWorld: ${getWorld()}\nSpieler: ${getPlayer()}\nZeit: ${new Date().toLocaleString("de-DE")}`,
+        content: `\u26a0\ufe0f Bot-Schutz erkannt!\nWorld: ${getWorld()}\nSpieler: ${getPlayer()}\nZeit: ${new Date().toLocaleString(
+          "de-DE"
+        )}`,
       };
 
       // GM_xmlhttpRequest is safer in userscripts (CORS), but fetch works for Discord webhooks too.

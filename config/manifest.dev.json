@@ -12,14 +12,6 @@
         "compliance": "legal"
       },
       {
-        "url": "modules/botGuardNotifier.js",
-        "id": "botGuardNotifier",
-        "title": "Discord: Bot-Benachrichtigung",
-        "desc": "Sendet eine Discord-Nachricht, sobald der Bot-Schutz ausgelöst wird.",
-        "defaultEnabled": true,
-        "compliance": "legal"
-      },
-      {
         "url": "modules/baseUI.js",
         "id": "baseUI",
         "title": "Global: Visuelle Anpassungen",
@@ -49,7 +41,7 @@
         "url": "modules/farmAssistantAuto.js",
         "id": "farmAssistantAuto",
         "title": "Farm-Assistent: Auto Farmer",
-        "desc": "Klickt durch den Farm-Assistent",
+        "desc": "Klickt durch den Farm-Assistent,",
         "defaultEnabled": false,
         "compliance": "illegal"
       }
@@ -336,3 +328,4 @@
     ]
   }
 }
+
