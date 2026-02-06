@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SpeckMichs Die Stämme Tool Collection
 // @namespace    https://github.com/EmoteBot6
-// @version      3.3.14
+// @version      3.3.15
 // @description  Erweitert die Die Stämme Erfahrung mit einigen Tools und Skripten
 // @author       SpeckMich
 // @connect      raw.githubusercontent.com
@@ -926,6 +926,8 @@
   async function bootstrap() {
     const env = await getEnv();
     registerEnvMenu(env);
+    window.DS_ENV = env;
+    window.DS_IS_DEV = env === "dev";
 
     let modules = CONFIG.modules; // Fallback
     let assetsBase = "";

@@ -4,11 +4,13 @@
   const ROOT = (window.DSTools ||= {});
   const NS = (ROOT.massScavenge ||= {});
 
+  const isDev = (window.DS_ENV === 'dev') || (window.DS_IS_DEV === true);
+
   NS.constants = {
     LS_KEY_SETTINGS: 'DSMassScavengerSettings',
     MASS_ITER_LIMIT: 50,
     MASS_STEP_DELAY_MS: 1500,
     // Für Debug-Ausgaben (z.B. findAllInactiveCells)
-    DEBUG: true,
+    DEBUG: isDev,
   };
 })();

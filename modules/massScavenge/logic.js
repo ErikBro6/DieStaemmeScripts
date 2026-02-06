@@ -11,6 +11,9 @@
   const { parseMassConfig, getVillageById } = NS.massConfig;
   const { getVillageConfig, loadSettings } = NS.settings;
   const { DEBUG } = NS.constants;
+  const logDebug = (...args) => {
+    if (DEBUG) console.log(...args);
+  };
 
   const villagePools = new Map(); // key: village_id -> { unit: remaining }
 
@@ -93,15 +96,23 @@
     return pool;
   }
 
-  function fillTemplateForVillage(village, enabledUnits, freeSlotsForVillage, totalSlotsForVillage, villageId) {
-    if (!$) return false;
-
+  function getTemplateInputs() {
+    if (!$) return null;
     const inputs = $('#scavenge_mass_screen .candidate-squad-widget').not('.ds-mass-config')
       .find('input.unitsInput[name]');
+    return inputs && inputs.length ? inputs : null;
+  }
 
-    if (!inputs.length) return false;
-    if (!enabledUnits || !enabledUnits.length) return false;
+  function getInputUnits(inputs) {
+    const units = [];
+    inputs.each(function () {
+      const unit = $(this).attr('name');
+      if (unit) units.push(unit);
+    });
+    return units;
+  }
 
+  function computePerUnitForVillage(village, enabledUnits, freeSlotsForVillage, totalSlotsForVillage, villageId) {
     const maxCfg = getMaxConfigForVillage(villageId);
     const pool = getVillagePool(village, enabledUnits, maxCfg);
 
@@ -109,6 +120,8 @@
     const slotCount = totalSlotsForVillage > 0 ? totalSlotsForVillage : 1;
 
     const perUnit = {};
+    let total = 0;
+
     enabledUnits.forEach(unit => {
       const remaining = pool[unit] || 0;
       const maxVal = maxCfg && typeof maxCfg[unit] === 'number' && maxCfg[unit] > 0 ? maxCfg[unit] : null;
@@ -124,81 +137,63 @@
 
       if (!Number.isFinite(amount) || amount < 0) amount = 0;
       perUnit[unit] = amount;
+      total += amount;
     });
 
-    console.log('[DSMassScavenger] perUnit (Pool/Slots/Max) für Dorf', village.village_id, {
-      freeSlotsForVillage,
-      totalSlotsForVillage: slotCount,
-      pool: { ...pool },
-      maxCfg: { ...maxCfg },
-      perUnit,
+    return { perUnit, total, pool, maxCfg, slotCount };
+  }
+
+  function normalizePerUnit(perUnit, enabledUnits, inputUnits) {
+    const normalized = {};
+    inputUnits.forEach(unit => {
+      if (enabledUnits.includes(unit)) normalized[unit] = perUnit[unit] || 0;
+      else normalized[unit] = 0;
     });
+    return normalized;
+  }
 
-    let total = 0;
+  function buildTemplateKey(perUnit, inputUnits) {
+    return inputUnits.map(u => `${u}:${perUnit[u] || 0}`).join('|');
+  }
 
+  function applyTemplateInputs(perUnit, inputs) {
+    if (!inputs) return;
     inputs.each(function () {
       const $inp = $(this);
       const unit = $inp.attr('name');
       if (!unit) return;
 
-      if (!enabledUnits.includes(unit)) {
-        $inp.val('');
-        $inp.trigger('input').trigger('keyup').trigger('change');
-        return;
-      }
-
       const val = perUnit[unit] || 0;
-      total += val;
-
       $inp.val(val > 0 ? String(val) : '');
       $inp.trigger('input').trigger('keyup').trigger('change');
     });
+  }
 
-    enabledUnits.forEach(unit => {
-      const used = perUnit[unit] || 0;
-      if (used > 0) pool[unit] = Math.max(0, (pool[unit] || 0) - used);
+  function clearAllSelections() {
+    if (!$) return;
+    const $tbl = $('#scavenge_mass_screen .mass-scavenge-table');
+
+    $tbl.find('input.status-inactive:checked').each(function () {
+      guardAction(() => this.click());
     });
-
-    return total > 0;
+    $tbl.find('input.select-all-col:checked').each(function () {
+      guardAction(() => this.click());
+    });
+    $tbl.find('input.select-all-row:checked').each(function () {
+      guardAction(() => this.click());
+    });
   }
-
-function clearAllSelections() {
-  if (!$) return;
-  const $tbl = $('#scavenge_mass_screen .mass-scavenge-table');
-
-  $tbl.find('input.status-inactive:checked').each(function () {
-    guardAction(() => this.click());
-  });
-  $tbl.find('input.select-all-col:checked').each(function () {
-    guardAction(() => this.click());
-  });
-  $tbl.find('input.select-all-row:checked').each(function () {
-    guardAction(() => this.click());
-  });
-}
-
-function selectCell(cellObj) {
-  const { cell } = cellObj;
-  const cb = cell.querySelector('input.status-inactive');
-
-  if (cb) {
-    if (!cb.checked) guardAction(() => cb.click());
-    return cb.checked;
-  }
-
-  guardAction(() => cell.click());
-  return true;
-}
-
 
   function selectCell(cellObj) {
     const { cell } = cellObj;
     const cb = cell.querySelector('input.status-inactive');
+
     if (cb) {
-      if (!cb.checked) cb.click();
+      if (!cb.checked) guardAction(() => cb.click());
       return cb.checked;
     }
-    cell.click();
+
+    guardAction(() => cell.click());
     return true;
   }
 
@@ -235,63 +230,117 @@ function selectCell(cellObj) {
 
     const inactiveCells = findAllInactiveCells();
     if (!inactiveCells.length) {
-      console.log('[DSMassScavenger] keine option-inactive Zellen gefunden');
+      logDebug('[DSMassScavenger] keine option-inactive Zellen gefunden');
       return -1;
     }
 
-    for (const target of inactiveCells) {
-      const village = getVillageById(target.villageId);
+    const inputs = getTemplateInputs();
+    if (!inputs) {
+      console.warn('[DSMassScavenger] keine Template-Inputs gefunden → Abbruch');
+      return -1;
+    }
+
+    const inputUnits = getInputUnits(inputs);
+    if (!inputUnits.length) {
+      console.warn('[DSMassScavenger] keine Unit-Inputs gefunden → Abbruch');
+      return -1;
+    }
+
+    const cellsByVillage = new Map();
+    inactiveCells.forEach(c => {
+      const key = String(c.villageId);
+      const arr = cellsByVillage.get(key) || [];
+      arr.push(c);
+      cellsByVillage.set(key, arr);
+    });
+
+    const groups = new Map();
+
+    for (const [villageId, cells] of cellsByVillage.entries()) {
+      const village = getVillageById(villageId);
       if (!village) {
-        console.warn('[DSMassScavenger] Dorf nicht in JSON gefunden:', target.villageId);
+        console.warn('[DSMassScavenger] Dorf nicht in JSON gefunden:', villageId);
         continue;
       }
 
-      const enabledUnits = collectEnabledUnitsForVillage(target.villageId);
+      const enabledUnits = collectEnabledUnitsForVillage(villageId);
       if (!enabledUnits.length) {
-        console.log('[DSMassScavenger] Dorf', target.villageId, 'hat keine aktivierten Units → Slot übersprungen.');
+        logDebug('[DSMassScavenger] Dorf', villageId, 'hat keine aktivierten Units → übersprungen.');
         continue;
       }
 
-      const totalSlotsForVillage = target.row.querySelectorAll('td.option[data-id]').length || 1;
-      const freeForVillage = inactiveCells.filter(c => c.villageId === target.villageId).length || 1;
+      const totalSlotsForVillage = cells[0]?.row?.querySelectorAll('td.option[data-id]').length || 1;
+      const freeForVillage = cells.length || 1;
 
-      console.log('[DSMassScavenger] Nutze Dorf', village.village_id, `"${village.village_name}"`,
-        'für Slot', target.optionId,
-        '– freie Slots:', freeForVillage,
-        '– Gesamt-Slots:', totalSlotsForVillage
-      );
-
-      const hasUnits = fillTemplateForVillage(
+      const { perUnit, total, pool, maxCfg, slotCount } = computePerUnitForVillage(
         village,
         enabledUnits,
         freeForVillage,
         totalSlotsForVillage,
-        target.villageId
+        villageId
       );
 
-      if (!hasUnits) {
-        console.log('[DSMassScavenger] keine sendbaren Units für Dorf', village.village_id, '→ Slot übersprungen.');
+      if (total <= 0) {
+        logDebug('[DSMassScavenger] keine sendbaren Units für Dorf', village.village_id, '→ übersprungen.');
         continue;
       }
 
-      clearAllSelections();
+      logDebug('[DSMassScavenger] perUnit (Pool/Slots/Max) für Dorf', village.village_id, {
+        freeSlotsForVillage: freeForVillage,
+        totalSlotsForVillage: slotCount,
+        pool: { ...pool },
+        maxCfg: { ...maxCfg },
+        perUnit,
+      });
 
-      const ok = selectCell(target);
-      if (!ok) {
-        console.warn('[DSMassScavenger] konnte Slot nicht selektieren → Slot übersprungen.');
-        continue;
-      }
+      const perUnitAll = normalizePerUnit(perUnit, enabledUnits, inputUnits);
+      const key = buildTemplateKey(perUnitAll, inputUnits);
 
-      if ($) {
-        const $btn = $('#scavenge_mass_screen .buttons-container .btn-send');
-        if ($btn.length) $btn.removeAttr('disabled');
-      }
-
-      return 0;
+      const group = groups.get(key) || { perUnitAll, cells: [] };
+      group.cells.push(...cells);
+      groups.set(key, group);
     }
 
-    console.log('[DSMassScavenger] kein geeigneter Slot mit aktivierten Units gefunden.');
-    return -1;
+    if (!groups.size) {
+      logDebug('[DSMassScavenger] kein geeigneter Slot mit aktivierten Units gefunden.');
+      return -1;
+    }
+
+    const groupList = Array.from(groups.values()).sort((a, b) => b.cells.length - a.cells.length);
+    const chosen = groupList[0];
+
+    applyTemplateInputs(chosen.perUnitAll, inputs);
+    clearAllSelections();
+
+    let selectedCount = 0;
+    chosen.cells.forEach(cellObj => {
+      if (selectCell(cellObj)) selectedCount += 1;
+    });
+
+    if (!selectedCount) {
+      console.warn('[DSMassScavenger] keine Zelle selektiert → Abbruch.');
+      return -1;
+    }
+
+    chosen.cells.forEach(cellObj => {
+      const vId = String(cellObj.villageId);
+      const pool = villagePools.get(vId);
+      if (!pool) return;
+
+      inputUnits.forEach(unit => {
+        const used = chosen.perUnitAll[unit] || 0;
+        if (used <= 0) return;
+        if (!(unit in pool)) return;
+        pool[unit] = Math.max(0, (pool[unit] || 0) - used);
+      });
+    });
+
+    if ($) {
+      const $btn = $('#scavenge_mass_screen .buttons-container .btn-send');
+      if ($btn.length) $btn.removeAttr('disabled');
+    }
+
+    return 0;
   }
 
   NS.logic = {
