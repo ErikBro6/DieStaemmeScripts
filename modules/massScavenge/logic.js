@@ -15,6 +15,254 @@
     if (DEBUG) console.log(...args);
   };
 
+  const DEFAULT_RATIOS = [0.10, 0.25, 0.50, 0.75];
+  const FALLBACK_CARRY = {
+    spear: 25,
+    sword: 15,
+    axe: 10,
+    archer: 10,
+    scout: 0,
+    light: 80,
+    heavy: 50,
+    marcher: 50,
+    knight: 100,
+    ram: 0,
+    catapult: 0,
+    snob: 0,
+  };
+
+  function getScavengeMode() {
+    const st = loadSettings();
+    return st?.scavengeMode === 'sameDuration' ? 'sameDuration' : 'optimized';
+  }
+
+  function getOptionById(cfg, optionId) {
+    if (!cfg || !Array.isArray(cfg.options)) return null;
+    const id = Number(optionId);
+    let opt = cfg.options.find(o =>
+      o && (o.id === id || o.option_id === id || o.scavenge_option_id === id)
+    );
+    if (opt) return opt;
+    if (Number.isFinite(id)) {
+      if (cfg.options[id]) return cfg.options[id];
+      if (id > 0 && cfg.options[id - 1]) return cfg.options[id - 1];
+    }
+    return null;
+  }
+
+  function getOptionBase(opt) {
+    return opt?.base || opt || null;
+  }
+
+  function getOptionRatio(cfg, optionId) {
+    const opt = getOptionById(cfg, optionId);
+    const base = getOptionBase(opt);
+    const candidates = [
+      opt?.ratio, opt?.scavenge_factor, opt?.loot_factor,
+      base?.ratio, base?.scavenge_factor, base?.loot_factor, base?.factor,
+    ];
+    for (const v of candidates) {
+      if (Number.isFinite(v) && v > 0) return v;
+    }
+    const idx = Number(optionId);
+    if (Number.isFinite(idx)) {
+      if (idx >= 1 && idx <= DEFAULT_RATIOS.length && DEFAULT_RATIOS[idx - 1] != null) return DEFAULT_RATIOS[idx - 1];
+      if (idx >= 0 && idx < DEFAULT_RATIOS.length && DEFAULT_RATIOS[idx] != null) return DEFAULT_RATIOS[idx];
+    }
+    return 1;
+  }
+
+  function getOptionDurationParams(cfg, optionId) {
+    const opt = getOptionById(cfg, optionId);
+    const base = getOptionBase(opt);
+    return {
+      duration_factor: base?.duration_factor,
+      duration_exponent: base?.duration_exponent,
+      duration_initial_seconds: base?.duration_initial_seconds,
+    };
+  }
+
+  function getUnitCarry(unitDefs, unit) {
+    const def = unitDefs?.[unit] || {};
+    const candidates = [def.carry, def.carry_capacity, def.capacity, def.carrying_capacity];
+    for (const v of candidates) {
+      if (Number.isFinite(v) && v >= 0) return v;
+    }
+    if (FALLBACK_CARRY[unit] != null) return FALLBACK_CARRY[unit];
+    return 0;
+  }
+
+  function computeTotalCarry(pool, enabledUnits, unitDefs) {
+    let total = 0;
+    enabledUnits.forEach(unit => {
+      const amount = pool[unit] || 0;
+      if (amount <= 0) return;
+      const carry = getUnitCarry(unitDefs, unit);
+      total += amount * carry;
+    });
+    return total;
+  }
+
+  function computeEqualTimeFractions(optionIds, ratioByOption) {
+    const weights = optionIds.map(id => {
+      const r = ratioByOption[id] || 1;
+      return r > 0 ? (1 / r) : 0;
+    });
+    const sum = weights.reduce((s, v) => s + v, 0) || 1;
+    const out = {};
+    optionIds.forEach((id, i) => { out[id] = weights[i] / sum; });
+    return out;
+  }
+
+  function computeSameDurationFractions(totalCarry, optionIds, cfg, ratioByOption) {
+    if (!Number.isFinite(totalCarry) || totalCarry <= 0) {
+      return computeEqualTimeFractions(optionIds, ratioByOption);
+    }
+
+    const paramsByOption = {};
+    let allParamsOk = true;
+    optionIds.forEach(id => {
+      const p = getOptionDurationParams(cfg, id);
+      paramsByOption[id] = p;
+      if (!Number.isFinite(p.duration_factor) || !Number.isFinite(p.duration_exponent) || !Number.isFinite(p.duration_initial_seconds)) {
+        allParamsOk = false;
+      }
+    });
+
+    if (!allParamsOk) return computeEqualTimeFractions(optionIds, ratioByOption);
+
+    const initials = optionIds.map(id => paramsByOption[id].duration_initial_seconds || 0);
+    let lo = Math.max(0, ...initials);
+    let hi = Math.max(lo + 60, 3600);
+    let guard = 0;
+
+    const carryForTime = (id, timeSeconds) => {
+      const p = paramsByOption[id];
+      const ratio = ratioByOption[id] || 1;
+      if (ratio <= 0 || !Number.isFinite(p.duration_factor) || !Number.isFinite(p.duration_exponent)) return 0;
+      if (p.duration_factor <= 0 || p.duration_exponent <= 0) return 0;
+      const t = timeSeconds - (p.duration_initial_seconds || 0);
+      if (t <= 0) return 0;
+      const base = t / p.duration_factor;
+      if (base <= 0) return 0;
+      const haul = Math.pow(base, 1 / p.duration_exponent) / 100;
+      return haul / ratio;
+    };
+
+    const sumCarryAt = (timeSeconds) => {
+      let sum = 0;
+      optionIds.forEach(id => { sum += carryForTime(id, timeSeconds); });
+      return sum;
+    };
+
+    while (sumCarryAt(hi) < totalCarry && guard++ < 40) {
+      hi *= 2;
+      if (hi > 1e8) break;
+    }
+
+    if (sumCarryAt(hi) <= 0) return computeEqualTimeFractions(optionIds, ratioByOption);
+
+    for (let i = 0; i < 40; i++) {
+      const mid = (lo + hi) / 2;
+      if (sumCarryAt(mid) >= totalCarry) hi = mid;
+      else lo = mid;
+    }
+
+    const sum = sumCarryAt(hi) || 1;
+    const out = {};
+    optionIds.forEach(id => {
+      out[id] = carryForTime(id, hi) / sum;
+    });
+    return out;
+  }
+
+  function computeOptimalFractions(totalCarry, optionIds, ratioByOption) {
+    if (!Number.isFinite(totalCarry) || totalCarry <= 0) {
+      return computeEqualTimeFractions(optionIds, ratioByOption);
+    }
+
+    if (optionIds.length === 1) return { [optionIds[0]]: 1 };
+
+    const ratios = optionIds.map(id => ratioByOption[id] || 1);
+    const a = optionIds.map(() => 1 / optionIds.length);
+
+    const revPerHour = (cap, ai, ratio) => {
+      if (ai <= 0) return 0;
+      const load = cap * ai;
+      const denom = Math.pow((load * load) * 100 * (ratio * ratio), 0.45) + 1800;
+      return (load * ratio) / denom;
+    };
+
+    const totalRev = () => {
+      let s = 0;
+      for (let i = 0; i < optionIds.length; i++) {
+        s += revPerHour(totalCarry, a[i] || 0, ratios[i] || 1);
+      }
+      return s;
+    };
+
+    let improved = true;
+    let guard = 0;
+    while (improved && guard++ < 200) {
+      improved = false;
+      for (let k = 0; k < optionIds.length - 1; k++) {
+        const cur = totalRev();
+        if (a[k] > 0) {
+          const d = a[k] * 0.5;
+          a[k] -= d; a[k + 1] += d;
+          const v1 = totalRev();
+          if (v1 <= cur) { a[k + 1] -= d; a[k] += d; } else { improved = true; continue; }
+        }
+        if (a[k + 1] > 0) {
+          const d = a[k + 1] * 0.5;
+          a[k + 1] -= d; a[k] += d;
+          const v2 = totalRev();
+          if (v2 <= cur) { a[k] -= d; a[k + 1] += d; } else { improved = true; }
+        }
+      }
+    }
+
+    const sum = a.reduce((s, v) => s + v, 0) || 1;
+    const out = {};
+    optionIds.forEach((id, i) => { out[id] = a[i] / sum; });
+    return out;
+  }
+
+  function splitByFractions(amount, optionIds, fractionsByOption) {
+    const res = {};
+    let assigned = 0;
+    optionIds.forEach(id => {
+      const f = fractionsByOption[id] || 0;
+      const v = Math.floor((amount || 0) * f);
+      res[id] = v;
+      assigned += v;
+    });
+    let remainder = (amount || 0) - assigned;
+    if (remainder > 0) {
+      for (let i = optionIds.length - 1; i >= 0; i--) {
+        const id = optionIds[i];
+        if ((fractionsByOption[id] || 0) > 0) {
+          res[id] += remainder;
+          break;
+        }
+      }
+    }
+    return res;
+  }
+
+  function buildPerOptionUnitDistribution(pool, enabledUnits, optionIds, fractionsByOption) {
+    const perOption = {};
+    optionIds.forEach(id => { perOption[id] = {}; });
+
+    enabledUnits.forEach(unit => {
+      const amount = pool[unit] || 0;
+      const split = splitByFractions(amount, optionIds, fractionsByOption);
+      optionIds.forEach(id => { perOption[id][unit] = split[id] || 0; });
+    });
+
+    return perOption;
+  }
+
   const villagePools = new Map(); // key: village_id -> { unit: remaining }
 
   function collectEnabledUnitsForVillage(villageId) {
@@ -110,37 +358,6 @@
       if (unit) units.push(unit);
     });
     return units;
-  }
-
-  function computePerUnitForVillage(village, enabledUnits, freeSlotsForVillage, totalSlotsForVillage, villageId) {
-    const maxCfg = getMaxConfigForVillage(villageId);
-    const pool = getVillagePool(village, enabledUnits, maxCfg);
-
-    const divFree = freeSlotsForVillage > 0 ? freeSlotsForVillage : 1;
-    const slotCount = totalSlotsForVillage > 0 ? totalSlotsForVillage : 1;
-
-    const perUnit = {};
-    let total = 0;
-
-    enabledUnits.forEach(unit => {
-      const remaining = pool[unit] || 0;
-      const maxVal = maxCfg && typeof maxCfg[unit] === 'number' && maxCfg[unit] > 0 ? maxCfg[unit] : null;
-
-      let amount = 0;
-      if (maxVal != null) {
-        const perSlotFromMax = Math.floor(maxVal / slotCount);
-        const fairByPool = Math.floor(remaining / divFree);
-        amount = Math.min(perSlotFromMax, fairByPool);
-      } else {
-        amount = Math.floor(remaining / divFree);
-      }
-
-      if (!Number.isFinite(amount) || amount < 0) amount = 0;
-      perUnit[unit] = amount;
-      total += amount;
-    });
-
-    return { perUnit, total, pool, maxCfg, slotCount };
   }
 
   function normalizePerUnit(perUnit, enabledUnits, inputUnits) {
@@ -269,36 +486,46 @@
         continue;
       }
 
-      const totalSlotsForVillage = cells[0]?.row?.querySelectorAll('td.option[data-id]').length || 1;
-      const freeForVillage = cells.length || 1;
+      const maxCfg = getMaxConfigForVillage(villageId);
+      const pool = getVillagePool(village, enabledUnits, maxCfg);
+      const totalUnits = enabledUnits.reduce((s, u) => s + (pool[u] || 0), 0);
 
-      const { perUnit, total, pool, maxCfg, slotCount } = computePerUnitForVillage(
-        village,
-        enabledUnits,
-        freeForVillage,
-        totalSlotsForVillage,
-        villageId
-      );
-
-      if (total <= 0) {
+      if (totalUnits <= 0) {
         logDebug('[DSMassScavenger] keine sendbaren Units für Dorf', village.village_id, '→ übersprungen.');
         continue;
       }
 
-      logDebug('[DSMassScavenger] perUnit (Pool/Slots/Max) für Dorf', village.village_id, {
-        freeSlotsForVillage: freeForVillage,
-        totalSlotsForVillage: slotCount,
+      const optionIds = Array.from(new Set(cells.map(c => c.optionId))).sort((a, b) => a - b);
+      const ratioByOption = {};
+      optionIds.forEach(id => { ratioByOption[id] = getOptionRatio(cfg, id); });
+
+      const totalCarry = computeTotalCarry(pool, enabledUnits, cfg.unitDefs);
+      const mode = getScavengeMode();
+      const fractionsByOption = (mode === 'sameDuration')
+        ? computeSameDurationFractions(totalCarry, optionIds, cfg, ratioByOption)
+        : computeOptimalFractions(totalCarry, optionIds, ratioByOption);
+
+      const perOptionUnit = buildPerOptionUnitDistribution(pool, enabledUnits, optionIds, fractionsByOption);
+
+      logDebug('[DSMassScavenger] perOption (Pool/Mode) für Dorf', village.village_id, {
+        mode,
         pool: { ...pool },
         maxCfg: { ...maxCfg },
-        perUnit,
+        ratios: { ...ratioByOption },
+        fractions: { ...fractionsByOption },
       });
 
-      const perUnitAll = normalizePerUnit(perUnit, enabledUnits, inputUnits);
-      const key = buildTemplateKey(perUnitAll, inputUnits);
+      cells.forEach(cellObj => {
+        const perUnit = perOptionUnit[cellObj.optionId] || {};
+        const totalForCell = enabledUnits.reduce((s, u) => s + (perUnit[u] || 0), 0);
+        if (totalForCell <= 0) return;
+        const perUnitAll = normalizePerUnit(perUnit, enabledUnits, inputUnits);
+        const key = buildTemplateKey(perUnitAll, inputUnits);
 
-      const group = groups.get(key) || { perUnitAll, cells: [] };
-      group.cells.push(...cells);
-      groups.set(key, group);
+        const group = groups.get(key) || { perUnitAll, cells: [] };
+        group.cells.push({ ...cellObj, perUnitAll });
+        groups.set(key, group);
+      });
     }
 
     if (!groups.size) {
@@ -327,8 +554,9 @@
       const pool = villagePools.get(vId);
       if (!pool) return;
 
+      const perUnit = cellObj.perUnitAll || chosen.perUnitAll;
       inputUnits.forEach(unit => {
-        const used = chosen.perUnitAll[unit] || 0;
+        const used = perUnit[unit] || 0;
         if (used <= 0) return;
         if (!(unit in pool)) return;
         pool[unit] = Math.max(0, (pool[unit] || 0) - used);
@@ -354,3 +582,5 @@
 
 
 })();
+
+

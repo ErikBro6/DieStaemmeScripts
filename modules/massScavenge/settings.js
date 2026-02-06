@@ -10,6 +10,7 @@
     perVillage: {},     // { [villageId]: { units: string[]|null, max: { [unit]: number } } }
     // Globales Template (für "Apply to all villages")
     globalTemplate: { units: null, max: {} },
+    scavengeMode: 'optimized', // 'optimized' | 'sameDuration'
   };
 
   function loadSettings() {
@@ -35,7 +36,11 @@
         return { units, max };
       })();
 
-      return { enabledUnits, perVillage, globalTemplate };
+      const scavengeMode = (parsed.scavengeMode === 'sameDuration' || parsed.scavengeMode === 'optimized')
+        ? parsed.scavengeMode
+        : DEFAULT_SETTINGS.scavengeMode;
+
+      return { enabledUnits, perVillage, globalTemplate, scavengeMode };
     } catch {
       return { ...DEFAULT_SETTINGS };
     }
@@ -54,6 +59,9 @@
           const max = gt.max && typeof gt.max === 'object' ? gt.max : {};
           return { units, max };
         })(),
+        scavengeMode: (st.scavengeMode === 'sameDuration' || st.scavengeMode === 'optimized')
+          ? st.scavengeMode
+          : DEFAULT_SETTINGS.scavengeMode,
       };
       localStorage.setItem(LS_KEY_SETTINGS, JSON.stringify(safe));
     } catch {

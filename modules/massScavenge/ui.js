@@ -14,6 +14,9 @@
 
     const st = loadSettings() || {};
     const gt = st.globalTemplate || { units: null, max: {} };
+    const scavengeMode = (st.scavengeMode === 'sameDuration' || st.scavengeMode === 'optimized')
+      ? st.scavengeMode
+      : 'optimized';
 
     // enabled === null => default ("all units")
     // enabled === []   => explicitly none
@@ -33,6 +36,31 @@
     wrapper.id = 'ds-mass-global-units-row';
     wrapper.className = 'ds-mass-global-units-row';
     wrapper.style.marginTop = '6px';
+
+    const modeRow = document.createElement('div');
+    modeRow.className = 'ds-mass-mode-row';
+    modeRow.style.display = 'flex';
+    modeRow.style.alignItems = 'center';
+    modeRow.style.gap = '8px';
+    modeRow.style.margin = '6px 0 2px 10px';
+
+    const modeLabel = document.createElement('label');
+    modeLabel.style.display = 'inline-flex';
+    modeLabel.style.alignItems = 'center';
+    modeLabel.style.gap = '6px';
+    modeLabel.style.cursor = 'pointer';
+
+    const modeCb = document.createElement('input');
+    modeCb.type = 'checkbox';
+    modeCb.id = 'ds-mass-mode-same-duration';
+    modeCb.checked = scavengeMode === 'sameDuration';
+
+    const modeText = document.createElement('span');
+    modeText.textContent = 'Gleiche Dauer (sonst optimiert)';
+
+    modeLabel.appendChild(modeCb);
+    modeLabel.appendChild(modeText);
+    modeRow.appendChild(modeLabel);
 
     const table = document.createElement('table');
     table.className = 'candidate-squad-widget vis ds-mass-config';
@@ -146,6 +174,7 @@
     tbody.appendChild(inputTr);
 
     table.appendChild(tbody);
+    wrapper.appendChild(modeRow);
     wrapper.appendChild(table);
 
     sendContainer.parentElement.insertAdjacentElement('afterend', wrapper);

@@ -42,6 +42,16 @@ const guardAction = DSGuards?.guardAction ? DSGuards.guardAction.bind(DSGuards) 
       NS.settings.saveSettings(st);
     });
 
+    // Scavenge-Modus (oben): optimized vs sameDuration
+    root.addEventListener('change', ev => {
+      const target = ev.target;
+      if (!target || target.id !== 'ds-mass-mode-same-duration') return;
+
+      const st = NS.settings.loadSettings();
+      st.scavengeMode = target.checked ? 'sameDuration' : 'optimized';
+      NS.settings.saveSettings(st);
+    });
+
     // Global-Template: Checkboxen
     root.addEventListener('change', ev => {
       const target = ev.target;
@@ -188,6 +198,8 @@ const guardAction = DSGuards?.guardAction ? DSGuards.guardAction.bind(DSGuards) 
         // Global UI reset
         document.querySelectorAll('#ds-mass-global-units-row input.globalUnitToggle').forEach(cb => { cb.checked = true; });
         document.querySelectorAll('#ds-mass-global-units-row input.globalUnitMax').forEach(inp => { inp.value = ''; });
+        const modeCb = document.getElementById('ds-mass-mode-same-duration');
+        if (modeCb) modeCb.checked = false;
 
         console.log('[DSMassScavenger] Defaults gelöscht, alle Units aktiviert & Max-Werte zurückgesetzt.');
       });
