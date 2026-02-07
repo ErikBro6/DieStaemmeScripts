@@ -14,7 +14,7 @@
 
     const st = loadSettings() || {};
     const gt = st.globalTemplate || { units: null, max: {} };
-    const scavengeMode = (st.scavengeMode === 'sameDuration' || st.scavengeMode === 'optimized')
+    const scavengeMode = (st.scavengeMode === 'sameDuration' || st.scavengeMode === 'optimized' || st.scavengeMode === 'evenSplit')
       ? st.scavengeMode
       : 'optimized';
 
@@ -50,16 +50,32 @@
     modeLabel.style.gap = '6px';
     modeLabel.style.cursor = 'pointer';
 
-    const modeCb = document.createElement('input');
-    modeCb.type = 'checkbox';
-    modeCb.id = 'ds-mass-mode-same-duration';
-    modeCb.checked = scavengeMode === 'sameDuration';
-
     const modeText = document.createElement('span');
-    modeText.textContent = 'Gleiche Dauer (sonst optimiert)';
+    modeText.textContent = 'Verteilung:';
 
-    modeLabel.appendChild(modeCb);
+    const modeSelect = document.createElement('select');
+    modeSelect.id = 'ds-mass-mode-select';
+    modeSelect.className = 'input-nicer';
+
+    const optEven = document.createElement('option');
+    optEven.value = 'evenSplit';
+    optEven.textContent = 'Gleich verteilen (Standard)';
+
+    const optSame = document.createElement('option');
+    optSame.value = 'sameDuration';
+    optSame.textContent = 'Gleiche Dauer';
+
+    const optOptimized = document.createElement('option');
+    optOptimized.value = 'optimized';
+    optOptimized.textContent = 'Optimiert (Experimental)';
+
+    modeSelect.appendChild(optEven);
+    modeSelect.appendChild(optSame);
+    modeSelect.appendChild(optOptimized);
+    modeSelect.value = scavengeMode;
+
     modeLabel.appendChild(modeText);
+    modeLabel.appendChild(modeSelect);
     modeRow.appendChild(modeLabel);
 
     const table = document.createElement('table');

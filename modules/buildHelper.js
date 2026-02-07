@@ -3,6 +3,9 @@
  
 let wind = typeof unsafeWindow != 'undefined' ? unsafeWindow : window;
 wind.ScriptAPI.register('690-Dorfaufbau-Helfer (Startphase)', true, 'suilenroc', 'support-nur-im-forum@die-staemme.de');
+const nextBuildCache = { ts: 0, pending: false, data: null };
+const incomingCache = { ts: 0, pending: false, data: null };
+const marketGroupCache = { pending: false, data: null };
 
 let SettingsHelper;           // <— declare in module scope so strict-mode is happy
 
@@ -27,6 +30,7 @@ function startInterval() {
         } else if ($('#build_queue #xd_custom').length === 0 && $('[id*=xd_custom]').length !== 0) {
             updateQue()
         }
+        updateNextBuildBox()
         updateInactive()
 const firstCustom = $("#xd_custom")[0];
 if (firstCustom && typeof firstCustom.tooltipText !== "string") {
@@ -43,6 +47,7 @@ initSettingsHelper()
 if (SettingsHelper.checkConfigs()) {
     updateQue()
     updateBuildingInfo()
+    updateNextBuildBox()
     startInterval()
 }
  
@@ -256,6 +261,482 @@ function updateBuildingInfo() {
             }
         }
     }
+}
+
+// Show next Account-Manager build entry in "Bauen" tab
+function updateNextBuildBox() {
+    if (!document.getElementById('buildings')) return;
+    if (!nextBuildCache.pending) {
+        fetchNextBuildInfo();
+    }
+    if (!incomingCache.pending && (Date.now() - incomingCache.ts > 30000 || !incomingCache.data)) {
+        fetchIncomingForVillage();
+    }
+}
+
+function fetchNextBuildInfo() {
+    nextBuildCache.pending = true;
+    const url = `${game_data.link_base_pure}main&mode=accountmanager&_=${Date.now()}`;
+    $.ajax({ url, method: 'get', cache: false, success: (html)=>{
+        try {
+            const doc = new DOMParser().parseFromString(html, 'text/html');
+            nextBuildCache.data = parseNextBuildInfo(doc);
+            nextBuildCache.ts = Date.now();
+        } catch (e) {
+            nextBuildCache.data = null;
+        }
+        nextBuildCache.pending = false;
+        renderNextBuildBox(nextBuildCache.data);
+    }, error: ()=>{
+        nextBuildCache.pending = false;
+        nextBuildCache.data = null;
+        renderNextBuildBox(null, true);
+    }});
+}
+
+function parseNextBuildInfo(doc) {
+    // Prefer "Nächster Bauauftrag" section
+    const h4s = Array.from(doc.querySelectorAll('div.vis h4'));
+    const nextHeader = h4s.find(h=>h.textContent.trim() === 'Nächster Bauauftrag');
+    if (nextHeader) {
+        const wrap = nextHeader.closest('div.vis');
+        const link = wrap ? wrap.querySelector('a.inline-icon') : null;
+        const name = link ? link.textContent.trim() : '';
+        const classList = link ? Array.from(link.classList) : [];
+        const buildingClass = classList.find(c=>c.indexOf('building-') === 0);
+        const buildingKey = buildingClass ? buildingClass.replace('building-', '') : '';
+        return buildingKey ? { buildingKey, name, level: null } : null;
+    }
+    // Account-Manager not active message
+    const statusHeader = h4s.find(h=>h.textContent.trim() === 'Dorfstatus');
+    if (statusHeader) {
+        const wrap = statusHeader.closest('div.vis');
+        const p = wrap ? wrap.querySelector('p.vis_item') : null;
+        const msg = p ? p.textContent.trim() : '';
+        if (msg) return { statusMessage: msg };
+    }
+    // Fallback: first queued entry
+    const row = doc.querySelector('#buildqueue tr[class*="buildorder_"]');
+    if (!row) return null;
+    const classList = Array.from(row.classList);
+    const buildClass = classList.find(c=>c.indexOf('buildorder_') === 0);
+    const buildingKey = buildClass ? buildClass.replace('buildorder_', '') : '';
+    const text = row.textContent || '';
+    const lvlMatch = text.match(/Stufe\s*(\d+)/i);
+    const level = lvlMatch ? parseInt(lvlMatch[1], 10) : null;
+    const name = buildingKey ? buildingKey : '';
+    return buildingKey ? { buildingKey, name, level } : null;
+}
+
+function renderNextBuildBox(data, isError) {
+    const containerId = 'xd_next_build_box';
+    let box = document.getElementById(containerId);
+    if (!box) {
+        const buildings = document.getElementById('buildings');
+        if (!buildings) return;
+        box = document.createElement('div');
+        box.id = containerId;
+        box.className = 'vis';
+        buildings.parentElement.insertBefore(box, buildings);
+    }
+    if (isError) {
+        box.innerHTML = `<h4>Nächster Bauauftrag</h4><p class="vis_item">Konnte Account-Manager nicht laden.</p>`;
+        return;
+    }
+    if (!data || !data.buildingKey) {
+        if (data && data.statusMessage) {
+            box.innerHTML = `<h4>Nächster Bauauftrag</h4><p class="vis_item">${data.statusMessage}</p>`;
+        } else {
+            box.innerHTML = `<h4>Nächster Bauauftrag</h4><p class="vis_item">Kein Bauauftrag gefunden.</p>`;
+        }
+        return;
+    }
+    const buildingKey = data.buildingKey;
+    const displayName = data.name || buildingKey;
+
+    // Prefer current page build table costs/level (matches UI and AM constraints)
+    const buildRow = document.getElementById(`main_buildrow_${buildingKey}`);
+    let targetLvl = null;
+    let wood = null;
+    let stone = null;
+    let iron = null;
+    if (buildRow) {
+        const link = buildRow.querySelector('a.btn-build[data-level-next]');
+        if (link) {
+            targetLvl = parseInt(link.getAttribute('data-level-next'), 10);
+        }
+        const woodTd = buildRow.querySelector('td.cost_wood[data-cost]');
+        const stoneTd = buildRow.querySelector('td.cost_stone[data-cost]');
+        const ironTd = buildRow.querySelector('td.cost_iron[data-cost]');
+        if (woodTd && stoneTd && ironTd) {
+            wood = parseInt(woodTd.getAttribute('data-cost'), 10);
+            stone = parseInt(stoneTd.getAttribute('data-cost'), 10);
+            iron = parseInt(ironTd.getAttribute('data-cost'), 10);
+        }
+    }
+    if (targetLvl == null) {
+        const currentLvl = game_data.village.buildings[buildingKey] || 0;
+        targetLvl = data.level != null ? data.level : currentLvl + 1;
+    }
+    if (wood == null || stone == null || iron == null) {
+        wood = buildCost(buildingKey, targetLvl, 'wood');
+        stone = buildCost(buildingKey, targetLvl, 'stone');
+        iron = buildCost(buildingKey, targetLvl, 'iron');
+    }
+    const curWood = readRes('wood');
+    const curStone = readRes('stone');
+    const curIron = readRes('iron');
+    const inc = incomingCache.data;
+    const incWood = inc ? inc.wood : 0;
+    const incStone = inc ? inc.stone : 0;
+    const incIron = inc ? inc.iron : 0;
+    const totalWood = curWood != null ? curWood + incWood : null;
+    const totalStone = curStone != null ? curStone + incStone : null;
+    const totalIron = curIron != null ? curIron + incIron : null;
+    const diffWood = totalWood != null ? totalWood - wood : null;
+    const diffStone = totalStone != null ? totalStone - stone : null;
+    const diffIron = totalIron != null ? totalIron - iron : null;
+    const needWood = diffWood != null ? Math.max(0, -diffWood) : 0;
+    const needStone = diffStone != null ? Math.max(0, -diffStone) : 0;
+    const needIron = diffIron != null ? Math.max(0, -diffIron) : 0;
+    const needsAny = (needWood + needStone + needIron) > 0;
+    const diffHtml = (diffWood != null && diffStone != null && diffIron != null)
+        ? `<span data-title="inkl. ankommend: ${numberWithCommas(incWood)}"><span class="icon header wood"></span>${formatDiff(diffWood)}</span>
+            <span data-title="inkl. ankommend: ${numberWithCommas(incStone)}"><span class="icon header stone"></span>${formatDiff(diffStone)}</span>
+            <span data-title="inkl. ankommend: ${numberWithCommas(incIron)}"><span class="icon header iron"></span>${formatDiff(diffIron)}</span>`
+        : '';
+    const structureKey = [
+        buildingKey,
+        targetLvl,
+        needsAny ? 'need' : 'none',
+        (marketGroupCache.data ? marketGroupCache.data.map(g=>g.id).join(',') : 'nogroups')
+    ].join('|');
+    if (box.dataset.structureKey !== structureKey) {
+        box.dataset.structureKey = structureKey;
+        const callControls = renderCallControls(needsAny);
+        box.innerHTML = `<h4 id="xd_next_build_header">Nächster Bauauftrag</h4>
+            <p class="vis_item" id="xd_next_build_name"></p>
+            <p class="vis_item" id="xd_next_build_costs"></p>
+            <p class="vis_item" id="xd_next_build_diff"></p>
+            ${callControls}`;
+    }
+    const nameLine = document.getElementById('xd_next_build_name');
+    if (nameLine) {
+        nameLine.innerHTML = `<span class="inline-icon building-${buildingKey}">${displayName}</span> (Stufe ${targetLvl})`;
+    }
+    const costLine = document.getElementById('xd_next_build_costs');
+    if (costLine) {
+        costLine.innerHTML = `
+            <span><span class="icon header wood"></span>${numberWithCommas(wood)}</span>
+            <span><span class="icon header stone"></span>${numberWithCommas(stone)}</span>
+            <span><span class="icon header iron"></span>${numberWithCommas(iron)}</span>`;
+    }
+    const diffLine = document.getElementById('xd_next_build_diff');
+    if (diffLine) {
+        diffLine.innerHTML = diffHtml;
+    }
+    bindCallControls(needWood, needStone, needIron, needsAny);
+}
+
+function readRes(id) {
+    const el = document.getElementById(id);
+    if (!el) return null;
+    const raw = (el.textContent || '').replace(/[^\d]/g, '');
+    return raw ? parseInt(raw, 10) : null;
+}
+
+function formatDiff(val) {
+    const sign = val >= 0 ? '+' : '-';
+    const color = val >= 0 ? 'green' : 'red';
+    return `<span style="color:${color}">${sign}${numberWithCommas(Math.abs(val))}</span>`;
+}
+
+function fetchActiveOverviewGroupId() {
+    const url = `${game_data.link_base_pure}overview_villages&type=all`;
+    return $.get(url).then((html)=>{
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const selected = doc.querySelector('strong.group-menu-item');
+        const id = selected ? selected.getAttribute('data-group-id') : null;
+        return id || '0';
+    });
+}
+
+function restoreGroupSelection(groupId) {
+    const safeId = groupId != null ? groupId : '0';
+    const urlOverview = `${game_data.link_base_pure}overview_villages&type=all&group=${safeId}`;
+    const urlMarket = `${game_data.link_base_pure}market&mode=call&group=${safeId}`;
+    $.get(urlOverview);
+    $.get(urlMarket);
+}
+
+function renderCallControls(needsAny) {
+    if (!needsAny) return '';
+    const selected = marketGroupCache.selectedId || '0';
+    const groupOptions = (marketGroupCache.data || [{ id: 0, label: 'alle' }])
+        .map(g=>`<option value="${g.id}"${String(g.id) === String(selected) ? ' selected' : ''}>${g.label}</option>`)
+        .join('');
+    return `<div class="vis_item" id="xd_call_controls">
+        <label style="margin-right:6px;">Gruppe:</label>
+        <select id="xd_call_group">${groupOptions}</select>
+        <button class="btn" id="xd_call_send" style="margin-left:8px;">Rohstoffe anfordern</button>
+    </div>`;
+}
+
+function bindCallControls(needWood, needStone, needIron, needsAny) {
+    if (!needsAny) return;
+    const btn = document.getElementById('xd_call_send');
+    if (!btn) return;
+    btn.dataset.needWood = String(needWood);
+    btn.dataset.needStone = String(needStone);
+    btn.dataset.needIron = String(needIron);
+    if (btn.dataset.bound === '1') return;
+    btn.dataset.bound = '1';
+    btn.addEventListener('click', (e)=>{
+        e.preventDefault();
+        const sel = document.getElementById('xd_call_group');
+        const groupId = sel ? sel.value : '0';
+        const doRequest = (restoreId) => {
+            marketGroupCache.selectedId = groupId;
+            requestResourcesFromGroup({
+                wood: parseInt(btn.dataset.needWood || '0', 10),
+                stone: parseInt(btn.dataset.needStone || '0', 10),
+                iron: parseInt(btn.dataset.needIron || '0', 10),
+                groupId: groupId,
+                restoreGroupId: restoreId
+            });
+        };
+        fetchActiveOverviewGroupId()
+            .then((restoreId)=> doRequest(restoreId || '0'))
+            .catch(()=> doRequest('0'));
+    });
+    const sel = document.getElementById('xd_call_group');
+    if (sel && !sel.dataset.bound) {
+        sel.dataset.bound = '1';
+        if (marketGroupCache.selectedId) sel.value = marketGroupCache.selectedId;
+        sel.addEventListener('change', ()=>{
+            if (marketGroupCache.selectedId !== sel.value) {
+                marketGroupCache.selectedId = sel.value;
+            }
+        });
+        if (!marketGroupCache.data && !marketGroupCache.pending) {
+            loadMarketGroups(()=> {
+                // re-render box to refresh dropdown options
+                renderNextBuildBox(nextBuildCache.data);
+            });
+        }
+    }
+}
+
+function loadMarketGroups(onDone) {
+    marketGroupCache.pending = true;
+    const url = `${game_data.link_base_pure}market&mode=call`;
+    $.get(url, (html)=>{
+        try {
+            const doc = new DOMParser().parseFromString(html, 'text/html');
+            marketGroupCache.data = parseMarketGroups(doc);
+        } catch (e) {
+            marketGroupCache.data = null;
+        }
+        marketGroupCache.pending = false;
+        if (onDone) onDone();
+    }).fail(()=>{
+        marketGroupCache.pending = false;
+        if (onDone) onDone();
+    });
+}
+
+function parseMarketGroups(doc) {
+    const items = Array.from(doc.querySelectorAll('.group-menu-item'));
+    if (!items.length) return null;
+    const groups = [];
+    items.forEach(el=>{
+        const id = el.getAttribute('data-group-id');
+        const label = (el.textContent || '').trim().replace(/^\s*>\s*|\s*<\s*$/g,'');
+        if (id != null && label) groups.push({ id, label });
+    });
+    if (!groups.find(g=>g.id === '0')) {
+        groups.unshift({ id: '0', label: 'alle' });
+    }
+    return groups;
+}
+
+function requestResourcesFromGroup({ wood, stone, iron, groupId, restoreGroupId }) {
+    const need = { wood, stone, iron };
+    const baseUrl = `${game_data.link_base_pure}market&mode=call&order=distance&dir=ASC&group=${groupId}`;
+    $.get(baseUrl, (html)=>{
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const rows = Array.from(doc.querySelectorAll('tr.supply_location'));
+        const launches = [];
+        let remaining = { ...need };
+
+        rows.forEach(row=>{
+            if (remaining.wood + remaining.stone + remaining.iron <= 0) return;
+            const villageId = row.getAttribute('data-village');
+            if (!villageId) return;
+            const traders = row.querySelector('td.traders');
+            if (traders) {
+                const txt = traders.textContent || '';
+                const available = parseInt(txt.split('/')[0].replace(/[^\d]/g, ''), 10);
+                if (!available) return;
+            }
+            const resWood = parseInt(row.querySelector('td.wood')?.getAttribute('data-res') || '0', 10);
+            const resStone = parseInt(row.querySelector('td.stone')?.getAttribute('data-res') || '0', 10);
+            const resIron = parseInt(row.querySelector('td.iron')?.getAttribute('data-res') || '0', 10);
+
+            const sendWood = Math.min(remaining.wood, resWood);
+            const sendStone = Math.min(remaining.stone, resStone);
+            const sendIron = Math.min(remaining.iron, resIron);
+            if (sendWood + sendStone + sendIron <= 0) return;
+            launches.push({
+                villageId,
+                wood: sendWood,
+                stone: sendStone,
+                iron: sendIron
+            });
+
+            remaining.wood -= sendWood;
+            remaining.stone -= sendStone;
+            remaining.iron -= sendIron;
+        });
+
+        if (launches.length === 0) {
+            UI.ErrorMessage("Keine passenden Dörfer für die Anforderung gefunden.", 4000);
+            return;
+        }
+
+        const targetId = game_data.village.id;
+        let idx = 0;
+        const sendNext = () => {
+            if (idx >= launches.length) {
+                UI.SuccessMessage("Rohstoffe angefordert.", 4000);
+                incomingCache.ts = 0;
+                incomingCache.data = null;
+                fetchIncomingForVillage();
+                if (restoreGroupId != null) {
+                    marketGroupCache.selectedId = restoreGroupId;
+                    const sel = document.getElementById('xd_call_group');
+                    if (sel) sel.value = restoreGroupId;
+                    restoreGroupSelection(restoreGroupId);
+                }
+                renderNextBuildBox(nextBuildCache.data);
+                return;
+            }
+            const l = launches[idx++];
+            TribalWars.post(
+                "market",
+                { ajaxaction: "map_send", village: l.villageId },
+                { target_id: targetId, wood: l.wood, stone: l.stone, iron: l.iron },
+                function (resp) {
+                    if (resp && resp.error) {
+                        UI.ErrorMessage(resp.error, 4000);
+                    }
+                    // small delay to avoid server spam
+                    window.setTimeout(sendNext, 200);
+                },
+                false
+            );
+        };
+        sendNext();
+    }).fail(()=>{
+        UI.ErrorMessage("Markt-Seite konnte nicht geladen werden.", 4000);
+    });
+}
+
+function fetchIncomingForVillage() {
+    incomingCache.pending = true;
+    const baseUrl = game_data.link_base_pure + "overview_villages&mode=trader&type=inc";
+    $.get(baseUrl, (data)=>{
+        const parser = new DOMParser();
+        const htmlDoc = parser.parseFromString(data, "text/html");
+        let list_pages = [];
+
+        if ($(htmlDoc).find(".paged-nav-item").parent().find("select").length > 0) {
+            Array.from($(htmlDoc).find(".paged-nav-item").parent().find("select").find("option")).forEach(function (item) {
+                list_pages.push(item.value);
+            });
+            list_pages.pop();
+        } else if (htmlDoc.getElementsByClassName("paged-nav-item").length > 0) {
+            let nr = 0;
+            Array.from(htmlDoc.getElementsByClassName("paged-nav-item")).forEach(function (item) {
+                let current = item.href;
+                current = current.split("page=")[0] + "page=" + nr;
+                nr++;
+                list_pages.push(current);
+            });
+        } else {
+            list_pages.push(baseUrl);
+        }
+        list_pages = list_pages.reverse();
+
+        const total = { wood: 0, stone: 0, iron: 0 };
+        const coordTarget = `${game_data.village.x}|${game_data.village.y}`;
+
+        function extractCoord(row) {
+            try {
+                if (row.children && row.children[4]) {
+                    const m = row.children[4].innerText.match(/[0-9]{3}\|[0-9]{3}/);
+                    if (m) return m[0];
+                }
+                if (row.children && row.children[3]) {
+                    const m = row.children[3].innerText.match(/[0-9]{3}\|[0-9]{3}/g);
+                    if (m && m[1]) return m[1];
+                    if (m && m[0]) return m[0];
+                }
+            } catch (_) {}
+            const m = (row.textContent || "").match(/[0-9]{3}\|[0-9]{3}/g);
+            if (m && m.length > 0) return m[m.length - 1];
+            return null;
+        }
+
+        function parseIncoming(doc) {
+            let rows = Array.from($(doc).find(".row_a, .row_b"));
+            for (let i = 0; i < rows.length; i++) {
+                const coord = extractCoord(rows[i]);
+                if (coord !== coordTarget) continue;
+                const wood = parseInt($(rows[i]).find(".wood").parent().text().replace(/[^\d]/g, ""), 10) || 0;
+                const stone = parseInt($(rows[i]).find(".stone").parent().text().replace(/[^\d]/g, ""), 10) || 0;
+                const iron = parseInt($(rows[i]).find(".iron").parent().text().replace(/[^\d]/g, ""), 10) || 0;
+                total.wood += wood;
+                total.stone += stone;
+                total.iron += iron;
+            }
+        }
+
+        function ajaxRequest(urls) {
+            let current_url;
+            if (urls.length > 0) {
+                current_url = urls.pop();
+            } else {
+                current_url = "stop";
+            }
+            if (urls.length >= 0 && current_url !== "stop") {
+                $.ajax({
+                    url: current_url,
+                    method: "get",
+                    success: (resp) => {
+                        const doc = parser.parseFromString(resp, "text/html");
+                        parseIncoming(doc);
+                        window.setTimeout(function () {
+                            ajaxRequest(urls);
+                        }, 200);
+                    },
+                    error: () => {
+                        incomingCache.pending = false;
+                        incomingCache.data = null;
+                    },
+                });
+            } else {
+                incomingCache.data = total;
+                incomingCache.ts = Date.now();
+                incomingCache.pending = false;
+                renderNextBuildBox(nextBuildCache.data);
+            }
+        }
+        ajaxRequest(list_pages);
+    }).fail(()=>{
+        incomingCache.pending = false;
+        incomingCache.data = null;
+    });
 }
  
 //same as is DS-UI-erweitert

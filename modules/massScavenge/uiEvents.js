@@ -42,13 +42,16 @@ const guardAction = DSGuards?.guardAction ? DSGuards.guardAction.bind(DSGuards) 
       NS.settings.saveSettings(st);
     });
 
-    // Scavenge-Modus (oben): optimized vs sameDuration
+    // Scavenge-Modus (oben): optimized | sameDuration | evenSplit
     root.addEventListener('change', ev => {
       const target = ev.target;
-      if (!target || target.id !== 'ds-mass-mode-same-duration') return;
+      if (!target || target.id !== 'ds-mass-mode-select') return;
 
+      const val = String(target.value || '');
       const st = NS.settings.loadSettings();
-      st.scavengeMode = target.checked ? 'sameDuration' : 'optimized';
+      st.scavengeMode = (val === 'sameDuration' || val === 'evenSplit' || val === 'optimized')
+        ? val
+        : 'optimized';
       NS.settings.saveSettings(st);
     });
 
@@ -198,8 +201,8 @@ const guardAction = DSGuards?.guardAction ? DSGuards.guardAction.bind(DSGuards) 
         // Global UI reset
         document.querySelectorAll('#ds-mass-global-units-row input.globalUnitToggle').forEach(cb => { cb.checked = true; });
         document.querySelectorAll('#ds-mass-global-units-row input.globalUnitMax').forEach(inp => { inp.value = ''; });
-        const modeCb = document.getElementById('ds-mass-mode-same-duration');
-        if (modeCb) modeCb.checked = false;
+        const modeSel = document.getElementById('ds-mass-mode-select');
+        if (modeSel) modeSel.value = 'optimized';
 
         console.log('[DSMassScavenger] Defaults gelöscht, alle Units aktiviert & Max-Werte zurückgesetzt.');
       });

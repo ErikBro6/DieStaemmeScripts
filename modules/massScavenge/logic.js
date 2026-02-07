@@ -33,7 +33,9 @@
 
   function getScavengeMode() {
     const st = loadSettings();
-    return st?.scavengeMode === 'sameDuration' ? 'sameDuration' : 'optimized';
+    if (st?.scavengeMode === 'sameDuration') return 'sameDuration';
+    if (st?.scavengeMode === 'evenSplit') return 'evenSplit';
+    return 'optimized';
   }
 
   function getOptionById(cfg, optionId) {
@@ -111,6 +113,13 @@
     const sum = weights.reduce((s, v) => s + v, 0) || 1;
     const out = {};
     optionIds.forEach((id, i) => { out[id] = weights[i] / sum; });
+    return out;
+  }
+
+  function computeEvenSplitFractions(optionIds) {
+    const count = optionIds.length || 1;
+    const out = {};
+    optionIds.forEach(id => { out[id] = 1 / count; });
     return out;
   }
 
@@ -326,16 +335,49 @@
     return cells;
   }
 
+  function collectActiveScavengeUnits(village, enabledUnits) {
+    const out = {};
+    enabledUnits.forEach(u => { out[u] = 0; });
+
+    const opts = village?.options;
+    if (!opts) return out;
+
+    const entries = Array.isArray(opts) ? opts : Object.values(opts);
+    entries.forEach(o => {
+      const squad = o?.scavenging_squad || o?.squad || o?.scavenge_squad;
+      if (!squad) return;
+
+      const unitsObj =
+        squad.units ||
+        squad.unit_counts ||
+        squad.unitCounts ||
+        squad.unit_counts_home ||
+        squad.unitCountsHome;
+
+      if (!unitsObj || typeof unitsObj !== 'object') return;
+
+      enabledUnits.forEach(unit => {
+        const n = unitsObj[unit];
+        if (Number.isFinite(n) && n > 0) out[unit] += n;
+      });
+    });
+
+    return out;
+  }
+
   function getVillagePool(village, enabledUnits, maxCfg) {
     const key = String(village.village_id);
     let pool = villagePools.get(key);
 
     if (!pool) {
+      const active = collectActiveScavengeUnits(village, enabledUnits);
       pool = {};
       enabledUnits.forEach(unit => {
         const home = (village.unit_counts_home && village.unit_counts_home[unit]) || 0;
         const maxVal = maxCfg && typeof maxCfg[unit] === 'number' && maxCfg[unit] > 0 ? maxCfg[unit] : null;
-        const cap = maxVal != null ? Math.min(home, maxVal) : home;
+        const used = active[unit] || 0;
+        const remainingCap = (maxVal != null) ? Math.max(0, maxVal - used) : null;
+        const cap = remainingCap != null ? Math.min(home, remainingCap) : home;
         pool[unit] = cap;
       });
       villagePools.set(key, pool);
@@ -503,7 +545,9 @@
       const mode = getScavengeMode();
       const fractionsByOption = (mode === 'sameDuration')
         ? computeSameDurationFractions(totalCarry, optionIds, cfg, ratioByOption)
-        : computeOptimalFractions(totalCarry, optionIds, ratioByOption);
+        : (mode === 'evenSplit')
+          ? computeEvenSplitFractions(optionIds)
+          : computeOptimalFractions(totalCarry, optionIds, ratioByOption);
 
       const perOptionUnit = buildPerOptionUnitDistribution(pool, enabledUnits, optionIds, fractionsByOption);
 
@@ -535,6 +579,18 @@
 
     const groupList = Array.from(groups.values()).sort((a, b) => b.cells.length - a.cells.length);
     const chosen = groupList[0];
+
+    // Avoid sending multiple slots from the same village in one batch.
+    // The input values apply per selected slot, so multiple slots would multiply.
+    const seenVillages = new Set();
+    const filteredCells = [];
+    chosen.cells.forEach(cellObj => {
+      const vId = String(cellObj.villageId);
+      if (seenVillages.has(vId)) return;
+      seenVillages.add(vId);
+      filteredCells.push(cellObj);
+    });
+    chosen.cells = filteredCells;
 
     applyTemplateInputs(chosen.perUnitAll, inputs);
     clearAllSelections();
