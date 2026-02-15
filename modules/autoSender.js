@@ -97,6 +97,13 @@
         return;
       }
 
+      // Fall 3: Clear if value exceeds available (and not special handling)
+      if (val > 0 && val > allCount && val !== 9999) {
+        input.value = '';  // Clear the bad value
+        allOk = false;     // Need to recheck after DOM updates
+        return;
+      }
+
       // Für alle anderen: nichts Besonderes
       unitsApplied[unit] = true;
     });
