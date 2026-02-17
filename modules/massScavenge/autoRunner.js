@@ -25,11 +25,14 @@
 
   // Optional: DSGuards nutzen (wenn vorhanden), sonst Fallback
   const DSGuards = window.DSGuards || null;
+  const DS_BotGuard = window.DS_BotGuard || null;
   const guardAction = DSGuards?.guardAction ? DSGuards.guardAction.bind(DSGuards) : (fn) => fn();
   const gateTimeout = DSGuards?.gateTimeout ? DSGuards.gateTimeout.bind(DSGuards) : (fn, ms) => setTimeout(fn, ms);
   const gateInterval = DSGuards?.gateInterval
     ? (fn, ms) => DSGuards.gateInterval(fn, ms, { jitter: [1000, 3000], requireVisible: false })
     : (fn, ms) => setInterval(fn, ms);
+
+  const isBotGuardActive = () => !!DS_BotGuard?.isActive?.();
 
   // -----------------------------
   // State
@@ -63,11 +66,13 @@
   }
 
   function guardedReload() {
+    if (isBotGuardActive()) return;
     guardAction(() => location.reload());
   }
 
   function guardedClick(el) {
     if (!el) return;
+    if (isBotGuardActive()) return;
     guardAction(() => el.click());
   }
 
@@ -140,6 +145,7 @@
   }
 
   function scheduleReloadFromJson() {
+    if (isBotGuardActive()) return;
     if (!autoEnabled) return;
     if (!isMassScavScreen()) return;
     if (refreshScheduled) return;
@@ -168,6 +174,13 @@
   // Send Cycle (Auto + Manual nutzt denselben Motor)
   // -----------------------------
   function finishRunAndMaybeReload(reason) {
+    if (isBotGuardActive()) {
+      sendingActive = false;
+      manualEnabled = false;
+      waitingForReload = false;
+      refreshScheduled = false;
+      return;
+    }
     sendingActive = false;
     manualEnabled = false;
 
@@ -184,6 +197,13 @@
 
   function sendCycle(iter = 1) {
     if (!sendingActive) return;
+    if (isBotGuardActive()) {
+      sendingActive = false;
+      manualEnabled = false;
+      waitingForReload = false;
+      refreshScheduled = false;
+      return;
+    }
 
     // Wenn User Auto ausmacht oder Seite wechselt → sauber stoppen
     if (!isMassScavScreen()) {
@@ -255,6 +275,7 @@
   function startSendCycle(source = 'unknown') {
     if (sendingActive) return;
     if (!isMassScavScreen()) return;
+    if (isBotGuardActive()) return;
 
     // Auto darf nicht parallel zu "waitingForReload" anfangen
     if (autoEnabled && waitingForReload) return;
@@ -291,6 +312,7 @@
   // Auto Tick Loop
   // -----------------------------
   function autoTick() {
+    if (isBotGuardActive()) return;
     if (!autoEnabled) return;
     if (!isMassScavScreen()) return;
 
@@ -423,6 +445,18 @@
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();
+
+  DS_BotGuard?.onChange?.((active) => {
+    if (!active) return;
+    sendingActive = false;
+    manualEnabled = false;
+    waitingForReload = false;
+    refreshScheduled = false;
+    if (!DSGuards && tickHandle) {
+      clearInterval(tickHandle);
+      tickHandle = null;
+    }
+  });
 
   // Export (bestehend) + neue Infos
   NS.autoRunner = {

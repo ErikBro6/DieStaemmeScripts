@@ -4,8 +4,15 @@
   const ROOT = (window.DSTools ||= {});
   const NS = (ROOT.massScavenge ||= {});
   const $ = window.jQuery;
-const DSGuards = window.DSGuards || null;
-const guardAction = DSGuards?.guardAction ? DSGuards.guardAction.bind(DSGuards) : (fn) => fn();
+  const DSGuards = window.DSGuards || null;
+  const guardAction = DSGuards?.guardAction ? DSGuards.guardAction.bind(DSGuards) : (fn) => fn();
+  const DS_BotGuard = window.DS_BotGuard || null;
+  const isBotGuardActive = () => !!DS_BotGuard?.isActive?.();
+  const shouldAbortForBotGuard = (ev) => {
+    if (!isBotGuardActive()) return false;
+    if (ev?.preventDefault) ev.preventDefault();
+    return true;
+  };
 
   function bindOnce() {
     const root = document.querySelector('#scavenge_mass_screen');
@@ -14,6 +21,7 @@ const guardAction = DSGuards?.guardAction ? DSGuards.guardAction.bind(DSGuards) 
 
     // Änderungen an Dorf-Checkboxen direkt speichern
     root.addEventListener('change', ev => {
+      if (shouldAbortForBotGuard(ev)) return;
       const target = ev.target;
       if (!target?.classList?.contains('villageUnitToggle')) return;
 
@@ -44,6 +52,7 @@ const guardAction = DSGuards?.guardAction ? DSGuards.guardAction.bind(DSGuards) 
 
     // Scavenge-Modus (oben): optimized | sameDuration | evenSplit
     root.addEventListener('change', ev => {
+      if (shouldAbortForBotGuard(ev)) return;
       const target = ev.target;
       if (!target || target.id !== 'ds-mass-mode-select') return;
 
@@ -57,6 +66,7 @@ const guardAction = DSGuards?.guardAction ? DSGuards.guardAction.bind(DSGuards) 
 
     // Global-Template: Checkboxen
     root.addEventListener('change', ev => {
+      if (shouldAbortForBotGuard(ev)) return;
       const target = ev.target;
       if (!target?.classList?.contains('globalUnitToggle')) return;
       const unit = target.dataset.unit;
@@ -82,6 +92,7 @@ const guardAction = DSGuards?.guardAction ? DSGuards.guardAction.bind(DSGuards) 
 
     // Änderungen an Max-Inputs direkt speichern
     root.addEventListener('input', ev => {
+      if (shouldAbortForBotGuard(ev)) return;
       const target = ev.target;
       if (!target?.classList?.contains('villageUnitMax')) return;
 
@@ -110,6 +121,7 @@ const guardAction = DSGuards?.guardAction ? DSGuards.guardAction.bind(DSGuards) 
 
     // Global-Template: Max-Inputs
     root.addEventListener('input', ev => {
+      if (shouldAbortForBotGuard(ev)) return;
       const target = ev.target;
       if (!target?.classList?.contains('globalUnitMax')) return;
 
@@ -135,6 +147,7 @@ const guardAction = DSGuards?.guardAction ? DSGuards.guardAction.bind(DSGuards) 
 
         // Fill-All
         $grid.on('click', 'a.fill-all', function (e) {
+          if (shouldAbortForBotGuard(e)) return;
           e.preventDefault();
           const enabledUnits = NS.logic.collectEnabledUnitsForFillAll();
           enabledUnits.forEach(unit => {
@@ -146,6 +159,7 @@ const guardAction = DSGuards?.guardAction ? DSGuards.guardAction.bind(DSGuards) 
 
         // Auto Start/Stop
         $grid.on('click', 'button.SendMassScav', function (e) {
+          if (shouldAbortForBotGuard(e)) return;
           e.preventDefault();
           NS.autoRunner.toggle();
         });
@@ -153,6 +167,7 @@ const guardAction = DSGuards?.guardAction ? DSGuards.guardAction.bind(DSGuards) 
 
       // Defaults speichern (Units + Max pro Dorf)
       $(document).on('click', '.ds-mass-save', function (e) {
+        if (shouldAbortForBotGuard(e)) return;
         e.preventDefault();
 
         const st = NS.settings.loadSettings();
@@ -191,6 +206,7 @@ const guardAction = DSGuards?.guardAction ? DSGuards.guardAction.bind(DSGuards) 
 
       // Defaults löschen
       $(document).on('click', '.ds-mass-clear', function (e) {
+        if (shouldAbortForBotGuard(e)) return;
         e.preventDefault();
         localStorage.removeItem(NS.constants.LS_KEY_SETTINGS);
 
@@ -209,6 +225,7 @@ const guardAction = DSGuards?.guardAction ? DSGuards.guardAction.bind(DSGuards) 
 
       // Apply-to-all
       $(document).on('click', '.ds-mass-apply-all', function (e) {
+        if (shouldAbortForBotGuard(e)) return;
         e.preventDefault();
 
         const rootRow = document.getElementById('ds-mass-global-units-row');

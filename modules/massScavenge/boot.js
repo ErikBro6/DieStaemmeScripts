@@ -3,6 +3,8 @@
 
   const ROOT = (window.DSTools ||= {});
   const NS = (ROOT.massScavenge ||= {});
+  const DS_BotGuard = window.DS_BotGuard || null;
+  const isBotGuardActive = () => !!DS_BotGuard?.isActive?.();
 
   function isCorrectPage() {
     const url = new URL(location.href);
@@ -46,6 +48,7 @@
     if (!isCorrectPage()) return;
 
     const iv = setInterval(() => {
+      if (isBotGuardActive()) return;
       const widget = document.querySelector(
         '#scavenge_mass_screen .candidate-squad-widget'
       );

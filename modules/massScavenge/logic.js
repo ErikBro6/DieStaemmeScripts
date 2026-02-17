@@ -2,7 +2,9 @@
   'use strict';
 
   const DSGuards = window.DSGuards || null;
+  const DS_BotGuard = window.DS_BotGuard || null;
   const guardAction = DSGuards?.guardAction ? DSGuards.guardAction.bind(DSGuards) : (fn) => fn();
+  const isBotGuardActive = () => !!DS_BotGuard?.isActive?.();
 
   const ROOT = (window.DSTools ||= {});
   const NS = (ROOT.massScavenge ||= {});
@@ -429,6 +431,7 @@
   }
 
   function clearAllSelections() {
+    if (isBotGuardActive()) return;
     if (!$) return;
     const $tbl = $('#scavenge_mass_screen .mass-scavenge-table');
 
@@ -444,6 +447,7 @@
   }
 
   function selectCell(cellObj) {
+    if (isBotGuardActive()) return false;
     const { cell } = cellObj;
     const cb = cell.querySelector('input.status-inactive');
 
@@ -481,6 +485,7 @@
   }
 
   function planNextSlot() {
+    if (isBotGuardActive()) return -1;
     const cfg = parseMassConfig();
     if (!cfg) {
       console.warn('[DSMassScavenger] keine Config → Abbruch');

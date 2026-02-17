@@ -95,9 +95,7 @@
           fn(active);
         } catch {}
       }
-      if (active)
-        console.warn("[DS-Tools] Bot-Schutz erkannt → alle Module pausiert.");
-      else console.info("[DS-Tools] Bot-Schutz vorbei → Fortsetzen möglich.");
+      // intentionally silent: avoid console noise on BotGuard state flips
     }
 
     // Observe DOM for appearing/disappearing protection
@@ -715,13 +713,8 @@
             try {
               const code = res.responseText;
               // eslint-disable-next-line no-eval
-              if (DS_BotGuard.isActive()) {
-                console.warn(
-                  "[DS-Tools] Bot-Schutz aktiv – eval übersprungen:",
-                  url
-                );
-                return resolve(); // skip executing this module
-              }
+              if (DS_BotGuard.isActive()) { return resolve(); // skip executing this module 
+                }
 
               eval(code + "\n//# sourceURL=" + url);
             } catch (e) {
@@ -1168,3 +1161,6 @@
     }
   })();
 })();
+
+
+
