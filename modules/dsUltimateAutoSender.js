@@ -23,6 +23,12 @@
   if (!Number.isFinite(withholdLight) || withholdLight < 0) withholdLight = DEFAULT_WITHHOLD.light;
 // --- NEW (minimal): store DS-Ultimate command type for next tab ---
 const GM_API = (typeof GM !== 'undefined' && GM) ? GM : null;
+const addValueChangeListener =
+  (typeof GM_addValueChangeListener === "function")
+    ? GM_addValueChangeListener
+    : (GM_API && typeof GM_API.addValueChangeListener === "function"
+      ? GM_API.addValueChangeListener.bind(GM_API)
+      : null);
 
 function clampNonNegativeInt(v, fallback) {
   const n = parseInt(v, 10);
@@ -224,9 +230,9 @@ function storeCommandType(tr) {
     }, delayMs ?? 3000);
   }
 
-  if (typeof GM_addValueChangeListener === "function") {
-    GM_addValueChangeListener("auto_close_signal", (name, oldVal, newVal, remote) => {
-      if (!remote || !newVal) return;
+  if (addValueChangeListener) {
+    addValueChangeListener("auto_close_signal", (name, oldVal, newVal, remote) => {
+      if (!newVal) return;
 
       const { token, delayMs, status } = newVal;
       if (!token) return;

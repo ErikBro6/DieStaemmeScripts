@@ -5,6 +5,8 @@
   const PARAM_VAL  = '1';
   const TOKEN_KEY  = 'autotoken';
   const TOKEN_SESSION_KEY = 'ds_auto_token';
+  const CLOSE_AFTER_SEND_KEY = 'ds_auto_close_after_send';
+  const CLOSE_AFTER_SEND_TS_KEY = 'ds_auto_close_after_send_ts';
   const SCAN_MS    = 300;
   const TIMEOUT_MS = 150_000;
   const CLICK_DELAY_MIN_MS = 450;
@@ -12,11 +14,30 @@
   const WITHHOLD_CFG_KEY = 'dsu_auto_sender_withhold';
 
   const url = new URL(location.href);
+  const closeAfterSend = sessionStorage.getItem(CLOSE_AFTER_SEND_KEY) === '1';
+  const closeAfterSendTs = Number(sessionStorage.getItem(CLOSE_AFTER_SEND_TS_KEY) || '0');
+  const closeFlagFresh = Number.isFinite(closeAfterSendTs) && closeAfterSendTs > 0 && (Date.now() - closeAfterSendTs) < 60_000;
+  if (closeAfterSend && closeFlagFresh) {
+    sessionStorage.removeItem(CLOSE_AFTER_SEND_KEY);
+    sessionStorage.removeItem(CLOSE_AFTER_SEND_TS_KEY);
+    try { window.close(); } catch {}
+    setTimeout(() => {
+      try {
+        if (!window.closed) {
+          location.replace('about:blank');
+          window.close();
+        }
+      } catch {}
+    }, 120);
+    return;
+  }
+
   const hasParam  = url.searchParams.get(PARAM_KEY) === PARAM_VAL;
   const autoToken = (url.searchParams.get(TOKEN_KEY) || '').trim();
+  const tokenFromSession = (sessionStorage.getItem(TOKEN_SESSION_KEY) || '').trim();
   const bySession = sessionStorage.getItem('ds_auto_flow') === '1';
   const cameByRef = !!(document.referrer && /:\/\/(?:www\.)?ds-ultimate\.de\//i.test(document.referrer));
-  const isAutoFlow = cameByRef || hasParam || bySession || !!autoToken;
+  const isAutoFlow = cameByRef || hasParam || !!autoToken || (bySession && !!tokenFromSession);
 
   if (!isAutoFlow) {
     return;
@@ -46,7 +67,7 @@
       form.appendChild(h);
     }
 
-    const token = autoToken || sessionStorage.getItem(TOKEN_SESSION_KEY) || '';
+    const token = autoToken || tokenFromSession || '';
     if (token && !form.querySelector(`input[name="${TOKEN_KEY}"]`)) {
       const t = document.createElement('input');
       t.type = 'hidden';
@@ -214,6 +235,7 @@
   }
 
   async function tryClick() {
+    if (sessionStorage.getItem(onceKey) === '1') return true;
     await ensureSpecialLimitsLoaded();
     if (!ensureUnitsIfNeeded()) {
       clearPendingClick();

@@ -32,6 +32,15 @@ let autoSendObserver = null;
 const GM_API = (typeof GM !== 'undefined' && GM && typeof GM.setValue === 'function') ? GM : null;
 let closeSignalSentFor = null;
 const TOKEN_SESSION_KEY = 'ds_auto_token';
+const CLOSE_AFTER_SEND_KEY = 'ds_auto_close_after_send';
+const CLOSE_AFTER_SEND_TS_KEY = 'ds_auto_close_after_send_ts';
+
+function markCloseAfterSend() {
+  try {
+    sessionStorage.setItem(CLOSE_AFTER_SEND_KEY, '1');
+    sessionStorage.setItem(CLOSE_AFTER_SEND_TS_KEY, String(Date.now()));
+  } catch {}
+}
 
 function getAutoToken() {
   try {
@@ -46,18 +55,39 @@ function getAutoToken() {
   }
 }
 
-function signalAutoCloseSent(delayMs = 2000) {
+async function signalAutoCloseSent(delayMs = 2000) {
   if (!GM_API || !isAutoFlow()) return;
+  markCloseAfterSend();
   const token = getAutoToken();
   if (!token || closeSignalSentFor === token) return;
   closeSignalSentFor = token;
 
-  GM_API.setValue('auto_close_signal', {
-    token,
-    status: 'sent',
-    delayMs,
-    createdAt: Date.now(),
-  }).catch(() => {});
+  try {
+    sessionStorage.removeItem('ds_auto_flow');
+    sessionStorage.removeItem(TOKEN_SESSION_KEY);
+  } catch {}
+
+  try {
+    await GM_API.setValue('auto_close_signal', {
+      token,
+      status: 'sent',
+      delayMs,
+      createdAt: Date.now(),
+    });
+  } catch {}
+
+  // fallback: close this tab directly as well
+  setTimeout(() => {
+    try { window.close(); } catch {}
+    setTimeout(() => {
+      try {
+        if (!window.closed) {
+          location.replace('about:blank');
+          window.close();
+        }
+      } catch {}
+    }, 150);
+  }, delayMs);
 }
 
 function isAutoFlow() {
@@ -386,11 +416,11 @@ function startAutoSendObserver() {
     const text = countdownElem.textContent.trim();
     if (autoSendEnabled && text === "0:00:00") {
       stopAutoSendObserver();
-      setTimeout(function () {
+      setTimeout(async function () {
         const $btn = $('#troop_confirm_submit');
         if ($btn.length && $btn.is(':visible') && !$btn.prop('disabled')) {
+          await signalAutoCloseSent(1800);
           $btn.click();
-          signalAutoCloseSent(1800);
           clearTabCountdown();
         }
       }, Math.random() * (600 - 400) + 400);
@@ -433,6 +463,7 @@ function tryInitConfirmEnhancer(attempts = 0) {
 document.addEventListener('DOMContentLoaded', () => { tryInitConfirmEnhancer(); });
 
 $(document).on('click', '#troop_confirm_submit', () => {
+  markCloseAfterSend();
   signalAutoCloseSent(1800);
 });
 
