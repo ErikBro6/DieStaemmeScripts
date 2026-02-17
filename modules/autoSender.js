@@ -1,13 +1,13 @@
 (function () {
   'use strict';
 
-  const PARAM_KEY  = 'auto';
-  const PARAM_VAL  = '1';
-  const SCAN_MS    = 300;
+  const PARAM_KEY = 'auto';
+  const PARAM_VAL = '1';
+  const SCAN_MS = 300;
   const TIMEOUT_MS = 150_000;
 
   const url = new URL(location.href);
-  const hasParam  = url.searchParams.get(PARAM_KEY) === PARAM_VAL;
+  const hasParam = url.searchParams.get(PARAM_KEY) === PARAM_VAL;
   const cameByRef = !!(document.referrer && /:\/\/(?:www\.)?ds-ultimate\.de\//i.test(document.referrer));
 
   if (!(cameByRef || hasParam)) {
@@ -48,7 +48,7 @@
 
   // Konfig für Spezialfälle
   const SPECIAL_LIMITS = {
-    ram:   5,    // max -5
+    ram: 5,    // max -5
     light: 125,  // max -125
   };
 
@@ -97,6 +97,13 @@
         return;
       }
 
+      // Fall 3: Clear if value exceeds available (and not special handling)
+      if (val > 0 && val > allCount && val !== 9999) {
+        input.value = allCount > 0 ? String(allCount) : '';  // Set Max Amount or Clear the bad value
+        allOk = false;     // Need to recheck after DOM updates
+        return;
+      }
+
       // Für alle anderen: nichts Besonderes
       unitsApplied[unit] = true;
     });
@@ -132,7 +139,7 @@
   let commandTypePromise = null;
 
   function pickButtonSync(commandType) {
-    const attackBtn  = document.querySelector('#target_attack');
+    const attackBtn = document.querySelector('#target_attack');
     const supportBtn = document.querySelector('#target_support');
 
     if (!supportBtn) return attackBtn || null;
@@ -179,3 +186,6 @@
   })();
 
 })();
+
+
+
