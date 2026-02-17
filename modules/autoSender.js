@@ -1,38 +1,40 @@
 (function () {
   'use strict';
 
-  const PARAM_KEY = 'auto';
-  const PARAM_VAL = '1';
-  const SCAN_MS = 300;
+  const PARAM_KEY  = 'auto';
+  const PARAM_VAL  = '1';
+  const TOKEN_KEY  = 'autotoken';
+  const TOKEN_SESSION_KEY = 'ds_auto_token';
+  const SCAN_MS    = 300;
   const TIMEOUT_MS = 150_000;
+  const CLICK_DELAY_MIN_MS = 450;
+  const CLICK_DELAY_MAX_MS = 900;
+  const WITHHOLD_CFG_KEY = 'dsu_auto_sender_withhold';
 
   const url = new URL(location.href);
-  const hasParam = url.searchParams.get(PARAM_KEY) === PARAM_VAL;
+  const hasParam  = url.searchParams.get(PARAM_KEY) === PARAM_VAL;
+  const autoToken = (url.searchParams.get(TOKEN_KEY) || '').trim();
+  const bySession = sessionStorage.getItem('ds_auto_flow') === '1';
   const cameByRef = !!(document.referrer && /:\/\/(?:www\.)?ds-ultimate\.de\//i.test(document.referrer));
+  const isAutoFlow = cameByRef || hasParam || bySession || !!autoToken;
 
-  if (!(cameByRef || hasParam)) {
-    sessionStorage.removeItem('ds_auto_flow');
+  if (!isAutoFlow) {
     return;
   }
   sessionStorage.setItem('ds_auto_flow', '1');
+  if (autoToken) sessionStorage.setItem(TOKEN_SESSION_KEY, autoToken);
 
   const onceKey = 'ds_auto_sent_' + url.pathname + '?' + url.search;
   if (sessionStorage.getItem(onceKey) === '1') return;
 
-  // keep your existing behavior; we are NOT introducing any ?action= changes
-  if (cameByRef && !hasParam) {
-    url.searchParams.set(PARAM_KEY, PARAM_VAL);
+  // clean legacy auto=1 from URL to avoid backend method/routing edge cases
+  if (hasParam) {
+    url.searchParams.delete(PARAM_KEY);
     history.replaceState(null, '', url);
   }
 
-  function withParam(u, key, val) {
-    const x = new URL(u, location.href);
-    x.searchParams.set(key, val);
-    return x.toString();
-  }
-
   function prepareFormForAuto(btn) {
-    if (!(cameByRef || hasParam)) return;
+    if (!isAutoFlow) return;
     const form = btn.closest('form') || btn.form;
     if (!form) return;
 
@@ -43,14 +45,23 @@
       h.value = PARAM_VAL;
       form.appendChild(h);
     }
-    if (form.action) form.action = withParam(form.action, PARAM_KEY, PARAM_VAL);
+
+    const token = autoToken || sessionStorage.getItem(TOKEN_SESSION_KEY) || '';
+    if (token && !form.querySelector(`input[name="${TOKEN_KEY}"]`)) {
+      const t = document.createElement('input');
+      t.type = 'hidden';
+      t.name = TOKEN_KEY;
+      t.value = token;
+      form.appendChild(t);
+    }
   }
 
-  // Konfig für Spezialfälle
-  const SPECIAL_LIMITS = {
-    ram: 5,    // max -5
-    light: 125,  // max -125
-  };
+  // Konfig fuer Spezialfaelle (wird via DS-Ultimate UI ueberschrieben)
+  const DEFAULT_SPECIAL_LIMITS = Object.freeze({
+    ram: 5,
+    light: 125,
+  });
+  let specialLimits = { ...DEFAULT_SPECIAL_LIMITS };
 
   // Einheiten die 9999→alle klicken sollen
   const AUTO_ALL_UNITS = ['axe', 'catapult', 'heavy', 'sword', 'spear'];
@@ -71,8 +82,8 @@
       const allCount = Number(input.dataset.allCount || '0');
 
       // Fall 1: Spezial-Limit (ram, light)
-      if (unit in SPECIAL_LIMITS) {
-        const reduce = SPECIAL_LIMITS[unit];
+      if (unit in specialLimits) {
+        const reduce = specialLimits[unit];
         if (val > allCount) {
           const newVal = Math.max(allCount - reduce, 0);
           input.value = newVal;
@@ -113,6 +124,7 @@
 
   // --- NEW: Decide button based on DS-Ultimate command type ---
   const GM_API = (typeof GM !== 'undefined' && GM && typeof GM.getValue === 'function') ? GM : null;
+  let specialLimitsPromise = null;
 
   const SUPPORT_TYPES = new Set([
     'Unterstützung',
@@ -137,6 +149,7 @@
   }
 
   let commandTypePromise = null;
+  let pendingClickTimer = null;
 
   function pickButtonSync(commandType) {
     const attackBtn = document.querySelector('#target_attack');
@@ -155,7 +168,40 @@
     return pickButtonSync(commandType);
   }
 
-  async function tryClick() {
+  function toNonNegativeInt(value, fallback) {
+    const n = Number(value);
+    return Number.isFinite(n) ? Math.max(0, Math.floor(n)) : fallback;
+  }
+
+  async function ensureSpecialLimitsLoaded() {
+    if (!GM_API) return;
+    if (!specialLimitsPromise) {
+      specialLimitsPromise = (async () => {
+        try {
+          const cfg = await GM_API.getValue(WITHHOLD_CFG_KEY, null);
+          if (!cfg || typeof cfg !== 'object') return;
+          specialLimits.ram = toNonNegativeInt(cfg.ram, DEFAULT_SPECIAL_LIMITS.ram);
+          specialLimits.light = toNonNegativeInt(cfg.light, DEFAULT_SPECIAL_LIMITS.light);
+        } catch {}
+      })();
+    }
+    await specialLimitsPromise;
+  }
+
+  function randomClickDelay() {
+    const span = Math.max(0, CLICK_DELAY_MAX_MS - CLICK_DELAY_MIN_MS);
+    return CLICK_DELAY_MIN_MS + Math.floor(Math.random() * (span + 1));
+  }
+
+  function clearPendingClick() {
+    if (!pendingClickTimer) return;
+    clearTimeout(pendingClickTimer);
+    pendingClickTimer = null;
+  }
+
+  async function delayedClick() {
+    await ensureSpecialLimitsLoaded();
+    if (sessionStorage.getItem(onceKey) === '1') return false;
     if (!ensureUnitsIfNeeded()) return false;
 
     const btn = await pickButton();
@@ -167,6 +213,25 @@
     return true;
   }
 
+  async function tryClick() {
+    await ensureSpecialLimitsLoaded();
+    if (!ensureUnitsIfNeeded()) {
+      clearPendingClick();
+      return false;
+    }
+
+    const btn = await pickButton();
+    if (!btn || btn.disabled) return false;
+
+    if (pendingClickTimer) return false;
+
+    pendingClickTimer = setTimeout(async () => {
+      pendingClickTimer = null;
+      await delayedClick();
+    }, randomClickDelay());
+    return false;
+  }
+
   // async bootstrap
   (async () => {
     if (await tryClick()) return;
@@ -176,13 +241,17 @@
       if (await tryClick()) {
         clearInterval(iv);
       } else if (Date.now() - start > TIMEOUT_MS) {
+        clearPendingClick();
         clearInterval(iv);
       }
     }, SCAN_MS);
 
     const mo = new MutationObserver(() => { tryClick(); });
     mo.observe(document.documentElement, { childList: true, subtree: true });
-    setTimeout(() => mo.disconnect(), TIMEOUT_MS);
+    setTimeout(() => {
+      clearPendingClick();
+      mo.disconnect();
+    }, TIMEOUT_MS);
   })();
 
 })();

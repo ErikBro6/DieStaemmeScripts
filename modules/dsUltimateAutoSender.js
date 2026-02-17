@@ -9,12 +9,54 @@
   // -------------------------------------------------------------
   const STORAGE_KEY_ENABLED = "dsu_auto_sender_enabled";
   const STORAGE_KEY_TRIGGER = "dsu_auto_sender_trigger";
+  const STORAGE_KEY_WITHHOLD_RAM = "dsu_auto_sender_withhold_ram";
+  const STORAGE_KEY_WITHHOLD_LIGHT = "dsu_auto_sender_withhold_light";
+  const WITHHOLD_CFG_KEY = "dsu_auto_sender_withhold";
+  const DEFAULT_WITHHOLD = { ram: 5, light: 125 };
 
   let autoEnabled = JSON.parse(localStorage.getItem(STORAGE_KEY_ENABLED)) ?? true;
   let triggerSec  = parseInt(localStorage.getItem(STORAGE_KEY_TRIGGER)) || 10;
   triggerSec = Math.max(1, Math.min(20, triggerSec));
+  let withholdRam = parseInt(localStorage.getItem(STORAGE_KEY_WITHHOLD_RAM), 10);
+  if (!Number.isFinite(withholdRam) || withholdRam < 0) withholdRam = DEFAULT_WITHHOLD.ram;
+  let withholdLight = parseInt(localStorage.getItem(STORAGE_KEY_WITHHOLD_LIGHT), 10);
+  if (!Number.isFinite(withholdLight) || withholdLight < 0) withholdLight = DEFAULT_WITHHOLD.light;
 // --- NEW (minimal): store DS-Ultimate command type for next tab ---
-const GM_API = (typeof GM !== 'undefined' && GM && typeof GM.setValue === 'function') ? GM : null;
+const GM_API = (typeof GM !== 'undefined' && GM) ? GM : null;
+
+function clampNonNegativeInt(v, fallback) {
+  const n = parseInt(v, 10);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(0, n);
+}
+
+function saveWithholdConfig() {
+  localStorage.setItem(STORAGE_KEY_WITHHOLD_RAM, String(withholdRam));
+  localStorage.setItem(STORAGE_KEY_WITHHOLD_LIGHT, String(withholdLight));
+  if (!GM_API || typeof GM_API.setValue !== "function") return;
+  GM_API.setValue(WITHHOLD_CFG_KEY, {
+    ram: withholdRam,
+    light: withholdLight,
+    createdAt: Date.now(),
+  }).catch(() => {});
+}
+
+async function loadWithholdConfig() {
+  if (!GM_API || typeof GM_API.getValue !== "function") return;
+  try {
+    const cfg = await GM_API.getValue(WITHHOLD_CFG_KEY, null);
+    if (!cfg || typeof cfg !== "object") return;
+    withholdRam = clampNonNegativeInt(cfg.ram, withholdRam);
+    withholdLight = clampNonNegativeInt(cfg.light, withholdLight);
+    localStorage.setItem(STORAGE_KEY_WITHHOLD_RAM, String(withholdRam));
+    localStorage.setItem(STORAGE_KEY_WITHHOLD_LIGHT, String(withholdLight));
+
+    const ramInput = document.getElementById("dsu_withhold_ram");
+    const lightInput = document.getElementById("dsu_withhold_light");
+    if (ramInput) ramInput.value = String(withholdRam);
+    if (lightInput) lightInput.value = String(withholdLight);
+  } catch {}
+}
 
 function getCommandType(tr) {
   const imgs = tr?.querySelectorAll('img#type_img');
@@ -27,7 +69,7 @@ function getCommandType(tr) {
 }
 
 function storeCommandType(tr) {
-  if (!GM_API) return;
+  if (!GM_API || typeof GM_API.setValue !== "function") return;
   const commandType = getCommandType(tr);
   // bewusst simpel: nur ein String + timestamp
   GM_API.setValue('pending_command_type', {
@@ -76,6 +118,18 @@ function storeCommandType(tr) {
         min="1" max="20"
         value="${triggerSec}"
         style="width:60px;margin-top:5px;">
+
+      <div style="margin-top:10px;font-weight:bold;">Withhold Ram</div>
+      <input id="dsu_withhold_ram" type="number"
+        min="0" step="1"
+        value="${withholdRam}"
+        style="width:70px;margin-top:5px;">
+
+      <div style="margin-top:8px;font-weight:bold;">Withhold Light</div>
+      <input id="dsu_withhold_light" type="number"
+        min="0" step="1"
+        value="${withholdLight}"
+        style="width:70px;margin-top:5px;">
     `;
 
     document.body.appendChild(box);
@@ -93,6 +147,18 @@ function storeCommandType(tr) {
     document.getElementById("dsu_trigger_input").addEventListener("change", e => {
       triggerSec = Math.max(1, Math.min(20, parseInt(e.target.value) || 10));
       localStorage.setItem(STORAGE_KEY_TRIGGER, triggerSec.toString());
+    });
+
+    document.getElementById("dsu_withhold_ram").addEventListener("change", e => {
+      withholdRam = clampNonNegativeInt(e.target.value, withholdRam);
+      e.target.value = String(withholdRam);
+      saveWithholdConfig();
+    });
+
+    document.getElementById("dsu_withhold_light").addEventListener("change", e => {
+      withholdLight = clampNonNegativeInt(e.target.value, withholdLight);
+      e.target.value = String(withholdLight);
+      saveWithholdConfig();
     });
   }
 
@@ -129,25 +195,53 @@ function storeCommandType(tr) {
 
   // TAB CLOSE SUPPORT
   const openedTabs = new Map();
+  const tokenToRow = new Map();
+
+  function markRowAsSent(rowId) {
+    if (!rowId) return;
+    const tr = document.getElementById(rowId);
+    if (!tr) return;
+
+    tr.style.outline = "2px solid #2f6fdd";
+
+    const cell = tr.querySelector("td");
+    if (!cell || cell.querySelector(".dsu-auto-sent-badge")) return;
+
+    const badge = document.createElement("span");
+    badge.className = "dsu-auto-sent-badge";
+    badge.textContent = " SENT";
+    badge.style.cssText = "margin-left:6px;padding:1px 6px;border-radius:999px;background:#2f6fdd;color:#fff;font-size:11px;font-weight:700;";
+    cell.appendChild(badge);
+  }
+
+  function closeOpenedTab(token, delayMs) {
+    const handle = openedTabs.get(token);
+    if (!handle || typeof handle.close !== "function") return;
+
+    setTimeout(() => {
+      try { handle.close(); } catch {}
+      openedTabs.delete(token);
+    }, delayMs ?? 3000);
+  }
+
   if (typeof GM_addValueChangeListener === "function") {
     GM_addValueChangeListener("auto_close_signal", (name, oldVal, newVal, remote) => {
       if (!remote || !newVal) return;
 
-      const { token, delayMs } = newVal;
-      const handle = openedTabs.get(token);
+      const { token, delayMs, status } = newVal;
+      if (!token) return;
 
-      if (handle && typeof handle.close === "function") {
-        setTimeout(() => {
-          try { handle.close(); } catch {}
-          openedTabs.delete(token);
-        }, delayMs ?? 3000);
+      if (status === "sent") {
+        const rowId = tokenToRow.get(token);
+        if (rowId) markRowAsSent(rowId);
       }
+
+      closeOpenedTab(token, delayMs);
     });
   }
 
   function openAutoTab(href, token) {
-    let url = withParam(href, "auto", "1");
-    url = withParam(url, "autotoken", token);
+    let url = withParam(href, "autotoken", token);
 
     const handle = (typeof GM_openInTab === "function")
       ? GM_openInTab(url, { active: true, insert: true, setParent: true })
@@ -166,6 +260,7 @@ function storeCommandType(tr) {
     fired.add(rowId);
 
     const token = `auto_${rowId}_${Date.now()}`;
+    tokenToRow.set(token, rowId);
 
     // NEW (MINIMAL): commandType für autoSender speichern
     storeCommandType(tr);
@@ -217,6 +312,7 @@ function storeCommandType(tr) {
   // -------------------------------------------------------------
   function init() {
     createControlPanel();
+    loadWithholdConfig();
   }
 
   if (document.readyState === "complete" || document.readyState === "interactive") {

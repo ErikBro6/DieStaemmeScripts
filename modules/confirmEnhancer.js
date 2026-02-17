@@ -29,12 +29,43 @@ const waitForUiLib = (ms=3000) =>
 let sendTimeInit = false;
 let autoSendEnabled = false;
 let autoSendObserver = null;
+const GM_API = (typeof GM !== 'undefined' && GM && typeof GM.setValue === 'function') ? GM : null;
+let closeSignalSentFor = null;
+const TOKEN_SESSION_KEY = 'ds_auto_token';
+
+function getAutoToken() {
+  try {
+    const urlToken = (new URL(location.href).searchParams.get('autotoken') || '').trim();
+    if (urlToken) {
+      sessionStorage.setItem(TOKEN_SESSION_KEY, urlToken);
+      return urlToken;
+    }
+    return (sessionStorage.getItem(TOKEN_SESSION_KEY) || '').trim();
+  } catch {
+    try { return (sessionStorage.getItem(TOKEN_SESSION_KEY) || '').trim(); } catch { return ''; }
+  }
+}
+
+function signalAutoCloseSent(delayMs = 2000) {
+  if (!GM_API || !isAutoFlow()) return;
+  const token = getAutoToken();
+  if (!token || closeSignalSentFor === token) return;
+  closeSignalSentFor = token;
+
+  GM_API.setValue('auto_close_signal', {
+    token,
+    status: 'sent',
+    delayMs,
+    createdAt: Date.now(),
+  }).catch(() => {});
+}
 
 function isAutoFlow() {
   const u = new URL(location.href);
   const byParam   = u.searchParams.get('auto') === '1';
+  const byToken   = !!(u.searchParams.get('autotoken') || '').trim();
   const bySession = sessionStorage.getItem('ds_auto_flow') === '1';
-  return byParam || bySession;
+  return byParam || byToken || bySession;
 }
 
 // optional: hält auto=1 sichtbar (kosmetisch)
@@ -359,6 +390,7 @@ function startAutoSendObserver() {
         const $btn = $('#troop_confirm_submit');
         if ($btn.length && $btn.is(':visible') && !$btn.prop('disabled')) {
           $btn.click();
+          signalAutoCloseSent(1800);
           clearTabCountdown();
         }
       }, Math.random() * (600 - 400) + 400);
@@ -399,6 +431,10 @@ function tryInitConfirmEnhancer(attempts = 0) {
   }
 }
 document.addEventListener('DOMContentLoaded', () => { tryInitConfirmEnhancer(); });
+
+$(document).on('click', '#troop_confirm_submit', () => {
+  signalAutoCloseSent(1800);
+});
 
 // --- Planner-Übernahme ---
 async function pickupArrivalFromPlanner() {
