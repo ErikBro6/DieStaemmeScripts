@@ -99,7 +99,7 @@
 
       // Fall 3: Clear if value exceeds available (and not special handling)
       if (val > 0 && val > allCount && val !== 9999) {
-        input.value = '';  // Clear the bad value
+        input.value = allCount > 0 ? String(allCount) : '';  // Set Max Amount or Clear the bad value
         allOk = false;     // Need to recheck after DOM updates
         return;
       }
@@ -186,3 +186,6 @@
   })();
 
 })();
+
+
+
