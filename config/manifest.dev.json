@@ -266,6 +266,16 @@
         "compliance": "illegal"
       }
     ],
+    "attackPlannerTwForge": [
+      {
+        "url": "modules/twForgeAutoSender.js",
+        "id": "twForgeAutoSender",
+        "title": "TwForge: Auto-Sender",
+        "desc": "Automatisches Senden von TwForge Planer-Eintraegen. Nutzt den bestehenden Versammlungsplatz Auto-Sender + Confirm Enhancer.",
+        "defaultEnabled": true,
+        "compliance": "illegal"
+      }
+    ],
     "info_player": {
       "url": "modules/playerInfoTools.js",
       "id": "playerInfoTools",

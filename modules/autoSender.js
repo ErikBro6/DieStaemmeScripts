@@ -12,6 +12,7 @@
   const CLICK_DELAY_MIN_MS = 450;
   const CLICK_DELAY_MAX_MS = 900;
   const WITHHOLD_CFG_KEY = 'dsu_auto_sender_withhold';
+  const PENDING_UNITS_KEY = 'pending_units';
 
   const url = new URL(location.href);
   const closeAfterSend = sessionStorage.getItem(CLOSE_AFTER_SEND_KEY) === '1';
@@ -88,9 +89,13 @@
   const AUTO_ALL_UNITS = ['axe', 'catapult', 'heavy', 'sword', 'spear'];
 
   const unitsApplied = {};
+  let pendingUnitsPromise = null;
+  let pendingUnitsPayload = null;
+  let pendingUnitsInjected = false;
 
   function ensureUnitsIfNeeded() {
     let allOk = true;
+    injectPendingUnitsIfPresent();
 
     // Allgemeine Behandlung für alle Inputs die wir kennen
     const unitInputs = document.querySelectorAll('input.unitsInput[id^="unit_input_"]');
@@ -172,13 +177,19 @@
   let commandTypePromise = null;
   let pendingClickTimer = null;
 
+  function isSupportCommandType(commandType) {
+    if (!commandType) return false;
+    if (SUPPORT_TYPES.has(commandType)) return true;
+    return /support|unterst/i.test(String(commandType));
+  }
+
   function pickButtonSync(commandType) {
     const attackBtn = document.querySelector('#target_attack');
     const supportBtn = document.querySelector('#target_support');
 
     if (!supportBtn) return attackBtn || null;
 
-    if (commandType && SUPPORT_TYPES.has(commandType)) return supportBtn;
+    if (isSupportCommandType(commandType)) return supportBtn;
     return attackBtn || supportBtn || null;
   }
 
@@ -194,7 +205,68 @@
     return Number.isFinite(n) ? Math.max(0, Math.floor(n)) : fallback;
   }
 
+  function readCurrentVillageTarget() {
+    try {
+      return {
+        village: url.searchParams.get('village') || null,
+        target: url.searchParams.get('target') || null,
+      };
+    } catch {
+      return { village: null, target: null };
+    }
+  }
+
+  async function loadPendingUnits() {
+    if (!GM_API) return null;
+    try {
+      const p = await GM_API.getValue(PENDING_UNITS_KEY, null);
+      if (!p || typeof p !== 'object' || !p.createdAt) return null;
+      if ((Date.now() - p.createdAt) > 10 * 60 * 1000) return null;
+
+      const cur = readCurrentVillageTarget();
+      if (p.village && cur.village && String(p.village) !== String(cur.village)) return null;
+      if (p.target && cur.target && String(p.target) !== String(cur.target)) return null;
+
+      return p;
+    } catch {
+      return null;
+    }
+  }
+
+  function injectPendingUnitsIfPresent() {
+    if (pendingUnitsInjected) return;
+    const payload = pendingUnitsPayload;
+    if (!payload || !payload.units || typeof payload.units !== 'object') return;
+
+    const entries = Object.entries(payload.units);
+    if (!entries.length) {
+      pendingUnitsInjected = true;
+      return;
+    }
+
+    for (const [unit, amountRaw] of entries) {
+      const amount = Number(amountRaw);
+      if (!Number.isFinite(amount) || amount <= 0) continue;
+
+      const input = document.querySelector(`input.unitsInput[id^="unit_input_"][name="${unit}"]`);
+      if (!input) continue;
+
+      // 9999 is handled by existing "all" logic.
+      input.value = String(Math.floor(amount));
+      unitsApplied[unit] = false;
+    }
+
+    pendingUnitsInjected = true;
+    if (GM_API && typeof GM_API.setValue === 'function') {
+      GM_API.setValue(PENDING_UNITS_KEY, null).catch(() => {});
+    }
+  }
+
   async function ensureSpecialLimitsLoaded() {
+    if (GM_API && !pendingUnitsPromise) {
+      pendingUnitsPromise = loadPendingUnits().then((p) => { pendingUnitsPayload = p; });
+    }
+    if (pendingUnitsPromise) await pendingUnitsPromise;
     if (!GM_API) return;
     if (!specialLimitsPromise) {
       specialLimitsPromise = (async () => {

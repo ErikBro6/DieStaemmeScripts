@@ -57,9 +57,9 @@ function getAutoToken() {
 
 async function signalAutoCloseSent(delayMs = 2000) {
   if (!GM_API || !isAutoFlow()) return;
-  markCloseAfterSend();
   const token = getAutoToken();
   if (!token || closeSignalSentFor === token) return;
+  markCloseAfterSend();
   closeSignalSentFor = token;
 
   try {
@@ -463,7 +463,8 @@ function tryInitConfirmEnhancer(attempts = 0) {
 document.addEventListener('DOMContentLoaded', () => { tryInitConfirmEnhancer(); });
 
 $(document).on('click', '#troop_confirm_submit', () => {
-  markCloseAfterSend();
+  const token = getAutoToken();
+  if (!token) return;
   signalAutoCloseSent(1800);
 });
 

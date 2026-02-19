@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SpeckMichs Die Stämme Tool Collection
 // @namespace    https://github.com/EmoteBot6
-// @version      3.3.19
+// @version      3.3.20
 // @description  Erweitert die Die Stämme Erfahrung mit einigen Tools und Skripten
 // @author       SpeckMich
 // @connect      raw.githubusercontent.com
@@ -10,6 +10,7 @@
 // @connect      discord.com
 // @match        https://*.die-staemme.de/game.php?*
 // @match        https://*ds-ultimate.de/tools/attackPlanner/*
+// @match        https://twforge.net/worlds/*/planner/plans/*
 // @icon         https://pbs.twimg.com/profile_images/1456997417807716357/oX-R0v9l_400x400.png
 // @updateURL    https://raw.githubusercontent.com/EmoteBot6/DieStaemmeScripts/master/main.user.js
 // @downloadURL  https://raw.githubusercontent.com/EmoteBot6/DieStaemmeScripts/master/main.user.js
@@ -600,6 +601,30 @@
           "attackPlannerEdit",
           MODULES.attackPlannerEdit
         )),
+        ...(await getGlobalUrls()),
+      ];
+    }
+
+    // 1b) TwForge planner plan page
+    if (
+      ctx.host.endsWith("twforge.net") &&
+      /^\/worlds\/[^/]+\/planner\/plans\/\d+/.test(ctx.path)
+    ) {
+      const twfEntries = toArray(MODULES.attackPlannerTwForge)
+        .map(normalizeModuleEntry)
+        .filter(Boolean);
+      const twfUrls = [];
+      for (const entry of twfEntries) {
+        // Always load this module on TwForge planner pages, even if an old pref disabled it.
+        if (entry.id === "twForgeAutoSender") {
+          twfUrls.push(entry.url);
+          continue;
+        }
+        if (await isModuleEnabled(entry)) twfUrls.push(entry.url);
+      }
+
+      return [
+        ...twfUrls,
         ...(await getGlobalUrls()),
       ];
     }
