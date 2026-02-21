@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DS → AM Farm Auto Clicker
 // @namespace    speckmich.amfarm
-// @version      0.1.2
+// @version      0.1.3
 // @description  Auto-Klick für Farm-Assistent (A/B) mit UI + DSGuards
 // @match        https://*.die-staemme.de/game.php?*&screen=am_farm*
 // @run-at       document-idle
@@ -27,6 +27,7 @@
     delay: parseInt(localStorage.getItem('amfarm_delay'), 10) || 300,
     reload: parseInt(localStorage.getItem('amfarm_reload'), 10) || 5000,
     button: localStorage.getItem('amfarm_button') || 'a', // a | b
+    fallback: JSON.parse(localStorage.getItem('amfarm_fallback')) ?? true, // use other button if preferred cannot be clicked
   };
 
   let clickTimer = null;
@@ -37,25 +38,46 @@
     localStorage.setItem('amfarm_delay', state.delay);
     localStorage.setItem('amfarm_reload', state.reload);
     localStorage.setItem('amfarm_button', state.button);
+    localStorage.setItem('amfarm_fallback', JSON.stringify(state.fallback));
   }
 
   /* -------------------- CORE -------------------- */
+  function isClickable(btn) {
+    if (!btn) return false;
+    if (btn.offsetParent === null) return false;
+    if (btn.classList.contains('farm_icon_disabled')) return false;
+    if (btn.getAttribute('aria-disabled') === 'true') return false;
+    if (getComputedStyle(btn).pointerEvents === 'none') return false;
+    return true;
+  }
+
   async function clickAll() {
-    const selector =
-      state.button === 'a' ? 'a.farm_icon_a' : 'a.farm_icon_b';
+    const rows = [...document.querySelectorAll('#plunder_list tr[id^="village_"]')];
 
-    const buttons = [...document.querySelectorAll(selector)]
-      .filter(btn => btn.offsetParent !== null);
-
-    for (const btn of buttons) {
+    for (const row of rows) {
       if (!state.enabled) return;
+
+      const preferredClass = state.button === 'a' ? 'farm_icon_a' : 'farm_icon_b';
+      const fallbackClass = state.button === 'a' ? 'farm_icon_b' : 'farm_icon_a';
+      const preferredBtn = row.querySelector(`a.${preferredClass}`);
+      const fallbackBtn = row.querySelector(`a.${fallbackClass}`);
+
+      let btnToClick = null;
+
+      if (isClickable(preferredBtn)) {
+        btnToClick = preferredBtn;
+      } else if (state.fallback && isClickable(fallbackBtn)) {
+        btnToClick = fallbackBtn;
+      }
+
+      if (!btnToClick) continue;
 
       if (guardAction) {
         guardAction(() => {
-          btn.click();
+          btnToClick.click();
         });
       } else {
-        btn.click();
+        btnToClick.click();
       }
 
       await new Promise(r => setTimeout(r, state.delay));
@@ -169,6 +191,27 @@
       saveState();
     };
     box.appendChild(select);
+
+    const fallbackWrap = document.createElement('label');
+    Object.assign(fallbackWrap.style, {
+      display: 'block',
+      marginTop: '8px',
+      cursor: 'pointer',
+      userSelect: 'none',
+    });
+
+    const fallbackInput = document.createElement('input');
+    fallbackInput.type = 'checkbox';
+    fallbackInput.checked = state.fallback;
+    fallbackInput.style.marginRight = '6px';
+    fallbackInput.onchange = () => {
+      state.fallback = fallbackInput.checked;
+      saveState();
+    };
+
+    fallbackWrap.appendChild(fallbackInput);
+    fallbackWrap.appendChild(document.createTextNode('Use other button if blocked'));
+    box.appendChild(fallbackWrap);
 
     document.body.appendChild(box);
     updateToggle();
