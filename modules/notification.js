@@ -26,29 +26,37 @@
   // Ändere hier was -> Digest ändert sich -> Popup erscheint wieder
   // -----------------------------
   const POPUP = {
-    enabled: false,
-    id: "2026-01-02-newyear",
-    title: "DS-Tools – Update",
-    headline: `Frohes Neues! Neuigkeiten in v${SCRIPT_VERSION}`,
+    enabled: true,
+    id: "2026-02-22-support-announcement-v3",
+    title: "DS-Tools - Ankündigung",
+    headline: `Danke für euren Support!`,
+    profileImage:
+      "https://pbs.twimg.com/profile_images/1456997417807716357/oX-R0v9l_400x400.png",
     headerNote:
-      "Willkommen in SpeckMichs die Stämme Tool Collection. Über dieses neue PopUp informiere ich euch regelmässig über Neuigkeiten und Änderungen an der Tool-Collection.",
-    changelog: [
-      "Massen Raubzug Automatisierung: Dateistruktur grundlegend überarbeitet. Oberfläche um eine Vorlage auf alle Dörfer anzuwenden hinzugefügt.",
-      "Massen Raubzug Rechner: Entfernt. Jetzt nur noch ein Modul: Massen Raubzug Automatisierung.",
-      "Notification: Neues Modul, über welches PopUps wie dieses hier angezeigt werden.",
+      "Freut mich riesig, dass du das Tool aktiv nutzt.",
+    body: [
+      "Ich mache eine Die-Stämme-Pause, daher wird das Tool vermutlich vorerst nicht mehr aktiv weiterentwickelt. Die Zeit mit euch und die Entwicklung an dem Projekt hat mir wirklich viel Spaß gemacht.",
+      "Wenn ihr dringende Umsetzungswünsche oder Ideen habt, meldet euch gerne direkt bei mir über Discord oder auf Buy Me a Coffee. Über jede Unterstützung freue ich mich wirklich sehr.",
+      "Das Repository bleibt natürlich offen: Ihr könnt gerne auf GitHub beitragen, Pull Requests erstellen und Issues anlegen. Ich schaue mir PRs definitiv an.",
+      "Wenn euch das Tool hilft, teilt es gern mit Freunden, Familie und euren Stammesmitgliedern.",
     ],
     links: [
       {
         label: "GitHub",
-        href: "https://github.com/ErikBro6/DieStaemmeScripts",
+        href: "https://github.com/EmoteBot6/DieStaemmeScripts",
       },
       {
-        label: "Changelog",
-        href: "https://github.com/ErikBro6/DieStaemmeScripts/commits/master",
+        label: "Pull Requests",
+        href: "https://github.com/EmoteBot6/DieStaemmeScripts/pulls",
       },
-      { label: "Buy Me a Coffee", href: "https://buymeacoffee.com/emotebot" },
+      {
+        label: "Issues",
+        href: "https://github.com/EmoteBot6/DieStaemmeScripts/issues",
+      },
     ],
-    footerNote: "Dieses Popup erscheint nur einmal pro Version/Inhalt.",
+    supportLink: "https://buymeacoffee.com/emotebot",
+    footerNote:
+      "Danke für die gemeinsame Zeit. Dieses Popup erscheint nur einmal pro Ankündigung.",
   };
 
   // FNV-1a 32bit
@@ -88,19 +96,31 @@
       )
       .join(" &nbsp;|&nbsp; ");
 
-    const items = POPUP.changelog.map((x) => `<li>${x}</li>`).join("");
+    const body = POPUP.body
+      .map((x) => `<p style="margin:0 0 10px 0; line-height:1.45;">${x}</p>`)
+      .join("");
 
     return `
+      <div style="position:relative; padding-right:86px;">
+        <img
+          src="${POPUP.profileImage}"
+          alt="Profilbild"
+          style="position:absolute; top:0; right:0; width:72px; height:72px; border-radius:50%; border:2px solid #b08a42; object-fit:cover;"
+        />
       <h2 style="margin:0 0 10px 0;">${POPUP.headline}</h2>
       <div style="font-size:12px; opacity:.85; margin-top:8px;">${POPUP.headerNote}</div>
       <table class="vis" style="width:100%; margin-bottom:12px;">
-        <tr><th>Änderungen</th></tr>
-        <tr><td><ul style="margin:6px 0 6px 18px; padding:0;">${items}</ul></td></tr>
+        <tr><th>Ankündigung</th></tr>
+        <tr><td style="padding:8px 10px;">${body}</td></tr>
       </table>
-      <div style="margin: 0 0 10px 0;">${links}</div>
+      <div style="text-align:center; margin: 0 0 14px 0;">
+        <a href="${POPUP.supportLink}" target="_blank" rel="noopener noreferrer" style="font-size:16px; font-weight:700;">Buy me a coffee</a>
+      </div>
+      <div style="margin: 0 0 10px 0; text-align:center;">${links}</div>
       <div style="font-size:12px; opacity:.85; margin-top:8px;">${POPUP.footerNote}</div>
       <div style="text-align:right; margin-top:12px;">
         <a href="#" class="btn" id="ds_notif_ok">OK</a>
+      </div>
       </div>
     `;
   }
@@ -212,3 +232,4 @@
 
   run();
 })();
+
